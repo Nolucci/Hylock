@@ -3,11 +3,15 @@ package com.hyvanced.hylock.lockon;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
+import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hyvanced.hylock.HylockPlugin;
 import com.hyvanced.hylock.config.HylockConfig;
 
+import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -49,7 +53,6 @@ public class LockOnManager {
     public boolean tryLockOn(UUID playerId, double playerX, double playerY, double playerZ,
                              double lookDirX, double lookDirY, double lookDirZ) {
         PlayerLockOnData data = getOrCreatePlayerData(playerId);
-        HylockConfig config = plugin.getConfig();
 
         // If already locked, release the current lock first
         if (data.getState() == LockOnState.LOCKED) {
@@ -280,8 +283,7 @@ public class LockOnManager {
 
     /**
      * Try to lock onto the nearest target from the world.
-     * Note: The preferred way to lock on is using Middle Mouse click on a target.
-     * This command-based method has limited functionality due to ECS complexity.
+     * Iterates through all players in the world and finds the nearest valid target.
      *
      * @param playerId The player's UUID
      * @param store The entity store
@@ -293,15 +295,91 @@ public class LockOnManager {
      * @return true if a target was found and locked
      */
     public boolean tryLockOnFromWorld(UUID playerId, Store<EntityStore> store, Ref<EntityStore> playerRef,
-                                       World world, double playerX, double playerY, double playerZ) {
-        // The ECS architecture makes direct entity iteration complex.
-        // The preferred method is using Middle Mouse click on a specific entity,
-        // which provides the target entity directly via PlayerMouseButtonEvent.
-        //
-        // For now, this command serves as a fallback that informs users to use
-        // the mouse-based targeting which is more reliable.
-        LOGGER.atInfo().log("[Hylock] /lock command used - prefer Middle Mouse click for targeting");
+        World world, double playerX, double playerY, double playerZ) {
+        LOGGER.atInfo().log("[Hylock] ===== tryLockOnFromWorld START =====");
+        LOGGER.atInfo().log("[Hylock] Searching for targets near (%.1f, %.1f, %.1f)", playerX, playerY, playerZ);
+
+        HylockConfig config = plugin.getConfig();
+        double maxRange = config.getLockOnRange();
+        double minRange = config.getMinLockDistance();
+        boolean lockPlayersEnabled = config.isLockOnPlayers();
+
+        LOGGER.atInfo().log("[Hylock] Config: maxRange=%.1f, minRange=%.1f, lockOnPlayers=%s",
+                maxRange, minRange, lockPlayersEnabled);
+
+        // Get all players in the world as potential targets
+        Collection<PlayerRef> allPlayers = world.getPlayerRefs();
+        LOGGER.atInfo().log("[Hylock] Found %d players in world", allPlayers.size());
+
+        TargetInfo bestTarget = null;
+        double bestDistance = maxRange + 1;
+
+        // Search through other players
+        for (PlayerRef otherPlayer : allPlayers) {
+            // Skip self
+            if (otherPlayer.getUuid().equals(playerId)) {
+                LOGGER.atInfo().log("[Hylock] Skipping self: %s", otherPlayer.getUsername());
+                continue;
+            }
+
+            // Check if we can lock onto players
+            if (!config.isLockOnPlayers()) {
+                LOGGER.atInfo().log("[Hylock] Player targeting disabled, skipping %s", otherPlayer.getUsername());
+                continue;
+            }
+
+            // Get other player's position using store and their reference
+            Ref<EntityStore> otherRef = otherPlayer.getReference();
+            if (otherRef == null) {
+                LOGGER.atInfo().log("[Hylock] No reference for player %s", otherPlayer.getUsername());
+                continue;
+            }
+
+            TransformComponent transform = store.getComponent(otherRef, TransformComponent.getComponentType());
+            if (transform == null) {
+                LOGGER.atInfo().log("[Hylock] No transform for player %s", otherPlayer.getUsername());
+                continue;
+            }
+
+            Vector3d otherPos = transform.getPosition();
+            double distance = calculateDistance(playerX, playerY, playerZ,
+                    otherPos.getX(), otherPos.getY(), otherPos.getZ());
+
+            LOGGER.atInfo().log("[Hylock] Found player %s at distance %.1f", otherPlayer.getUsername(), distance);
+
+            // Check if in range and closer than current best
+            if (distance <= maxRange && distance >= config.getMinLockDistance() && distance < bestDistance) {
+                bestDistance = distance;
+                bestTarget = new TargetInfo(
+                        otherPlayer.getUuid(),
+                        otherPlayer.getUsername(),
+                        false,  // Players are not hostile by default
+                        true    // Is player
+                );
+                bestTarget.updatePosition(otherPos.getX(), otherPos.getY(), otherPos.getZ());
+            }
+        }
+
+        // If we found a target, lock onto it
+        if (bestTarget != null) {
+            LOGGER.atInfo().log("[Hylock] Best target found: %s at distance %.1f", bestTarget.getEntityName(), bestDistance);
+            return lockOnTarget(playerId, bestTarget);
+        }
+
+        LOGGER.atInfo().log("[Hylock] No valid targets found in range %.1f (lockOnPlayers=%s)",
+                maxRange, config.isLockOnPlayers());
+        LOGGER.atInfo().log("[Hylock] ===== tryLockOnFromWorld END (no target) =====");
         return false;
+    }
+
+    /**
+     * Calculate distance between two 3D points
+     */
+    private double calculateDistance(double x1, double y1, double z1, double x2, double y2, double z2) {
+        double dx = x2 - x1;
+        double dy = y2 - y1;
+        double dz = z2 - z1;
+        return Math.sqrt(dx * dx + dy * dy + dz * dz);
     }
 
     /**

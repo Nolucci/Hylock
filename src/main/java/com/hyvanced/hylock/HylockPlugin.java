@@ -11,8 +11,12 @@ import com.hyvanced.hylock.commands.LockSwitchCommand;
 import com.hyvanced.hylock.commands.UnlockCommand;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.events.LockOnEventListener;
+import com.hyvanced.hylock.events.MouseTargetTracker;
+import com.hyvanced.hylock.events.PlayerInteractListener;
 import com.hyvanced.hylock.lockon.LockOnManager;
+import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
 import com.hypixel.hytale.server.core.event.events.player.PlayerMouseButtonEvent;
+import com.hypixel.hytale.server.core.event.events.player.PlayerMouseMotionEvent;
 
 /**
  * Hylock - Zelda-style target lock-on system for Hytale
@@ -31,6 +35,7 @@ public class HylockPlugin extends JavaPlugin {
     private static HylockPlugin instance;
     private LockOnManager lockOnManager;
     private HylockConfig config;
+    private MouseTargetTracker mouseTargetTracker;
 
     public HylockPlugin(JavaPluginInit init) {
         super(init);
@@ -75,9 +80,18 @@ public class HylockPlugin extends JavaPlugin {
         this.getCommandRegistry().registerCommand(new LockSwitchCommand(this));
     }
 
+    @SuppressWarnings("deprecation")
     private void registerEvents() {
         // Register mouse button event listener for lock-on toggle
         this.getEventRegistry().register(PlayerMouseButtonEvent.class, new LockOnEventListener(this));
+
+        // Register interact event listener for auto-lock on attack
+        // Use registerGlobal since PlayerInteractEvent has KeyType=String (not Void)
+        this.getEventRegistry().registerGlobal(PlayerInteractEvent.class, new PlayerInteractListener(this));
+
+        // Register mouse motion tracker to track what entity player is looking at
+        this.mouseTargetTracker = new MouseTargetTracker();
+        this.getEventRegistry().register(PlayerMouseMotionEvent.class, this.mouseTargetTracker);
     }
 
     /**
@@ -99,6 +113,13 @@ public class HylockPlugin extends JavaPlugin {
      */
     public HylockConfig getConfig() {
         return config;
+    }
+
+    /**
+     * Get the mouse target tracker
+     */
+    public MouseTargetTracker getMouseTargetTracker() {
+        return mouseTargetTracker;
     }
 
     /**

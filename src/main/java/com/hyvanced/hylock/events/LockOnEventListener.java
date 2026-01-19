@@ -3,8 +3,6 @@ package com.hyvanced.hylock.events;
 import java.util.UUID;
 import java.util.function.Consumer;
 
-import javax.annotation.Nonnull;
-
 import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.MouseButtonState;
@@ -39,7 +37,7 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     }
 
     @Override
-    public void accept(@Nonnull PlayerMouseButtonEvent event) {
+    public void accept(PlayerMouseButtonEvent event) {
         // DEBUG: Log every mouse event received
         LOGGER.atInfo().log("[Hylock] DEBUG: Mouse event received! Button: %s, State: %s",
                 event.getMouseButton().mouseButtonType,
@@ -67,11 +65,6 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
 
         // Get player info
         PlayerRef playerRef = event.getPlayerRefComponent();
-        if (playerRef == null) {
-            LOGGER.atWarning().log("[Hylock] DEBUG: PlayerRef is NULL!");
-            return;
-        }
-
         UUID playerId = playerRef.getUuid();
         LOGGER.atInfo().log("[Hylock] DEBUG: Player: %s (UUID: %s)", playerRef.getUsername(), playerId);
 
@@ -145,6 +138,7 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     /**
      * Check if an entity is a valid lock target
      */
+    @SuppressWarnings("removal")
     private boolean isValidTarget(Entity entity, UUID playerId, HylockConfig config) {
         if (entity == null) {
             return false;
@@ -168,6 +162,7 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     /**
      * Check if the target info represents the same entity
      */
+    @SuppressWarnings("removal")
     private boolean isSameEntity(TargetInfo targetInfo, Entity entity) {
         if (targetInfo == null || entity == null) {
             return false;
@@ -179,6 +174,7 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     /**
      * Create a TargetInfo from an Entity
      */
+    @SuppressWarnings("removal")
     private TargetInfo createTargetInfo(Entity entity) {
         boolean isPlayer = entity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
         boolean isHostile = !isPlayer; // Simplified - could check actual hostility
