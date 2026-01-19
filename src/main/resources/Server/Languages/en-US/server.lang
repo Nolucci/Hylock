@@ -1,0 +1,10 @@
+# Hylock - Zelda-style Lock-On System
+# Part of Hyvanced by Nolucci
+
+hylock.lock.acquired=Locked onto %s
+hylock.lock.released=Lock released
+hylock.lock.notarget=No valid target in range
+hylock.lock.switched=Switched to %s
+hylock.lock.noswitch=No other targets available
+hylock.lock.searching=Searching for target...
+hylock.settings.reset=All settings have been reset to defaults
