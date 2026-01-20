@@ -19,7 +19,7 @@ public class HylockConfig {
     // Lock behavior settings
     private boolean autoSwitchOnKill = true;    // Automatically switch to next target when current dies
     private boolean prioritizeHostile = true;   // Prioritize hostile mobs over neutral ones
-    private boolean lockOnPlayers = false;      // Allow locking onto other players (PvP)
+    private boolean lockOnPlayers = true;       // Allow locking onto other players (PvP) - enabled for testing
 
     // Camera settings
     private double cameraSmoothing = 0.15;      // Camera follow smoothness (0.0 = instant, 1.0 = very slow)
@@ -151,7 +151,7 @@ public class HylockConfig {
         this.minLockDistance = 2.0;
         this.autoSwitchOnKill = true;
         this.prioritizeHostile = true;
-        this.lockOnPlayers = false;
+        this.lockOnPlayers = true;
         this.cameraSmoothing = 0.15;
         this.cameraHeightOffset = 1.5;
         this.showLockIndicator = true;
