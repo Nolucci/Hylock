@@ -1,13 +1,23 @@
 package com.hyvanced.hylock.lockon;
 
+import com.hypixel.hytale.component.ArchetypeChunk;
+import com.hypixel.hytale.component.CommandBuffer;
 import com.hypixel.hytale.component.Ref;
 import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.entity.LivingEntity;
+import com.hypixel.hytale.server.core.modules.entity.AllLegacyLivingEntityTypesQuery;
+import com.hypixel.hytale.server.core.modules.entity.EntityModule;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hyvanced.hylock.HylockPlugin;
 import com.hyvanced.hylock.config.HylockConfig;
 
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -280,8 +290,7 @@ public class LockOnManager {
 
     /**
      * Try to lock onto the nearest target from the world.
-     * Note: The preferred way to lock on is using Middle Mouse click on a target.
-     * This command-based method has limited functionality due to ECS complexity.
+     * Searches for living entities within range and locks onto the closest one.
      *
      * @param playerId The player's UUID
      * @param store The entity store
@@ -292,16 +301,139 @@ public class LockOnManager {
      * @param playerZ Player's Z position
      * @return true if a target was found and locked
      */
-    public boolean tryLockOnFromWorld(UUID playerId, Store<EntityStore> store, Ref<EntityStore> playerRef,
-                                       World world, double playerX, double playerY, double playerZ) {
-        // The ECS architecture makes direct entity iteration complex.
-        // The preferred method is using Middle Mouse click on a specific entity,
-        // which provides the target entity directly via PlayerMouseButtonEvent.
-        //
-        // For now, this command serves as a fallback that informs users to use
-        // the mouse-based targeting which is more reliable.
-        LOGGER.atInfo().log("[Hylock] /lock command used - prefer Middle Mouse click for targeting");
-        return false;
+    @SuppressWarnings("deprecation")
+    public boolean tryLockOnFromWorld(UUID playerId, Store<EntityStore> store, Ref<EntityStore> playerRef, World world, double playerX, double playerY, double playerZ) {
+        HylockConfig config = plugin.getConfig();
+        double maxRange = config.getLockOnRange();
+        double maxRangeSquared = maxRange * maxRange;
+
+        LOGGER.atInfo().log("[Hylock] Searching for targets within %.1f blocks of (%.1f, %.1f, %.1f)",
+            maxRange, playerX, playerY, playerZ);
+
+        // Collect potential targets
+        List<CandidateTarget> candidates = new ArrayList<>();
+
+        // Iterate over all living entities in the world using the ECS query system
+        store.forEachChunk(AllLegacyLivingEntityTypesQuery.INSTANCE, (ArchetypeChunk<EntityStore> chunk, CommandBuffer<EntityStore> cmd) -> {
+            int size = chunk.size();
+
+            for (int i = 0; i < size; i++) {
+                Ref<EntityStore> entityRef = chunk.getReferenceTo(i);
+                if (entityRef == null) {
+                    continue;
+                }
+
+                // Get the LivingEntity component using EntityModule's ComponentType
+                LivingEntity entity = store.getComponent(entityRef, EntityModule.get().getComponentType(LivingEntity.class));
+                if (entity == null) {
+                    continue;
+                }
+
+                // Get the TransformComponent
+                TransformComponent transform = store.getComponent(entityRef, TransformComponent.getComponentType());
+                if (transform == null) {
+                    continue;
+                }
+
+                // Skip the player themselves
+                UUID entityId = entity.getUuid();
+                if (entityId != null && entityId.equals(playerId)) {
+                    continue;
+                }
+
+                // Skip other players if not configured to lock on them
+                if (entity instanceof com.hypixel.hytale.server.core.entity.entities.Player) {
+                    if (!config.isLockOnPlayers()) {
+                        continue;
+                    }
+                }
+
+                // Get entity position
+                Vector3d pos = transform.getPosition();
+                if (pos == null) {
+                    continue;
+                }
+
+                double dx = pos.getX() - playerX;
+                double dy = pos.getY() - playerY;
+                double dz = pos.getZ() - playerZ;
+                double distSquared = dx * dx + dy * dy + dz * dz;
+
+                // Check if within range
+                if (distSquared <= maxRangeSquared) {
+                    boolean isPlayer = entity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
+                    boolean isHostile = !isPlayer; // Simplified hostility check
+
+                    String entityName = entity.getLegacyDisplayName();
+                    if (entityName == null || entityName.isEmpty()) {
+                        entityName = entity.getClass().getSimpleName();
+                    }
+
+                    candidates.add(new CandidateTarget(
+                        entityId,
+                        entityName,
+                        pos.getX(), pos.getY(), pos.getZ(),
+                        distSquared,
+                        isHostile,
+                        isPlayer
+                    ));
+                }
+            }
+        });
+
+        LOGGER.atInfo().log("[Hylock] Found %d potential targets", candidates.size());
+
+        if (candidates.isEmpty()) {
+            return false;
+        }
+
+        // Sort by distance (closest first), with hostile entities prioritized if configured
+        candidates.sort(Comparator.comparingDouble((CandidateTarget c) -> {
+            double priority = c.distanceSquared;
+            if (config.isPrioritizeHostile() && c.isHostile) {
+                priority -= 1000; // Give hostile entities priority
+            }
+            return priority;
+        }));
+
+        // Lock onto the best candidate
+        CandidateTarget best = candidates.get(0);
+        TargetInfo targetInfo = new TargetInfo(
+            best.entityId,
+            best.entityName,
+            best.isHostile,
+            best.isPlayer
+        );
+        targetInfo.updatePosition(best.x, best.y, best.z);
+
+        LOGGER.atInfo().log("[Hylock] Locking onto %s at distance %.1f",
+            best.entityName, Math.sqrt(best.distanceSquared));
+
+        return lockOnTarget(playerId, targetInfo);
+    }
+
+    /**
+     * Internal class to hold candidate target data during search.
+     */
+    private static class CandidateTarget {
+        final UUID entityId;
+        final String entityName;
+        final double x, y, z;
+        final double distanceSquared;
+        final boolean isHostile;
+        final boolean isPlayer;
+
+        CandidateTarget(UUID entityId, String entityName, double x, double y, double z,
+                       double distanceSquared, boolean isHostile, boolean isPlayer) {
+            this.entityId = entityId;
+            this.entityName = entityName;
+            this.x = x;
+            this.y = y;
+            this.z = z;
+            this.distanceSquared = distanceSquared;
+            this.isHostile = isHostile;
+            this.isPlayer = isPlayer;
+        }
     }
 
     /**
