@@ -346,24 +346,37 @@ public class LockOnManager {
             }
         }
 
-        // STEP 2: Search for living entities (mobs) using ECS query
-        store.forEachChunk(AllLegacyLivingEntityTypesQuery.INSTANCE, (ArchetypeChunk<EntityStore> chunk, CommandBuffer<EntityStore> cmd) -> {
+        // STEP 2: Search for all entities with TransformComponent
+        // We iterate over all entity archetypes and check for nearby entities
+        LOGGER.atInfo().log("[Hylock] Searching for entities with TransformComponent...");
+
+        // Collect player positions to skip them in entity search
+        final java.util.Set<String> playerPositions = new java.util.HashSet<>();
+        for (PlayerRef p : world.getPlayerRefs()) {
+            Ref<EntityStore> pRef = p.getReference();
+            if (pRef != null) {
+                TransformComponent pTransform = store.getComponent(pRef, TransformComponent.getComponentType());
+                if (pTransform != null) {
+                    Vector3d pPos = pTransform.getPosition();
+                    if (pPos != null) {
+                        // Use position as key to identify players
+                        playerPositions.add(String.format("%.1f,%.1f,%.1f", pPos.getX(), pPos.getY(), pPos.getZ()));
+                    }
+                }
+            }
+        }
+
+        // Counter for generating unique IDs
+        final int[] entityCounter = {0};
+
+        // Use forEachChunk with TransformComponent query to find all entities
+        store.forEachChunk(TransformComponent.getComponentType(), (ArchetypeChunk<EntityStore> chunk, CommandBuffer<EntityStore> cmd) -> {
             int size = chunk.size();
+            LOGGER.atInfo().log("[Hylock] Processing chunk with %d entities", size);
 
             for (int i = 0; i < size; i++) {
                 Ref<EntityStore> entityRef = chunk.getReferenceTo(i);
                 if (entityRef == null) {
-                    continue;
-                }
-
-                // Get the LivingEntity component
-                LivingEntity entity = store.getComponent(entityRef, EntityModule.get().getComponentType(LivingEntity.class));
-                if (entity == null) {
-                    continue;
-                }
-
-                // Skip players (already handled above)
-                if (entity instanceof com.hypixel.hytale.server.core.entity.entities.Player) {
                     continue;
                 }
 
@@ -373,15 +386,15 @@ public class LockOnManager {
                     continue;
                 }
 
-                // Skip the player themselves
-                UUID entityId = entity.getUuid();
-                if (entityId != null && entityId.equals(playerId)) {
-                    continue;
-                }
-
                 // Get entity position
                 Vector3d pos = transform.getPosition();
                 if (pos == null) {
+                    continue;
+                }
+
+                // Skip if this is a player position
+                String posKey = String.format("%.1f,%.1f,%.1f", pos.getX(), pos.getY(), pos.getZ());
+                if (playerPositions.contains(posKey)) {
                     continue;
                 }
 
@@ -392,12 +405,14 @@ public class LockOnManager {
 
                 // Check if within range
                 if (distSquared <= maxRangeSquared && distSquared >= config.getMinLockDistance() * config.getMinLockDistance()) {
-                    String entityName = entity.getLegacyDisplayName();
-                    if (entityName == null || entityName.isEmpty()) {
-                        entityName = entity.getClass().getSimpleName();
-                    }
+                    // Generate a UUID based on position (for tracking purposes)
+                    entityCounter[0]++;
+                    UUID entityId = UUID.nameUUIDFromBytes(posKey.getBytes());
 
-                    LOGGER.atInfo().log("[Hylock] Found entity %s at distance %.1f", entityName, Math.sqrt(distSquared));
+                    String entityName = "Entity_" + entityCounter[0];
+
+                    LOGGER.atInfo().log("[Hylock] Found entity %s at distance %.1f (pos: %s)",
+                        entityName, Math.sqrt(distSquared), posKey);
                     candidates.add(new CandidateTarget(
                         entityId,
                         entityName,

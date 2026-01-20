@@ -75,6 +75,15 @@ public class LockCommand extends AbstractPlayerCommand {
             Entity targetedEntity = tracker.getTargetedEntity(playerId);
             if (targetedEntity != null) {
                 LOGGER.atInfo().log("[Hylock] Found targeted entity from mouse tracker!");
+
+                // Check if targeting players is allowed
+                boolean isTargetPlayer = targetedEntity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
+                if (isTargetPlayer && !plugin.getConfig().isLockOnPlayers()) {
+                    LOGGER.atInfo().log("[Hylock] Player targeting is disabled, skipping player target");
+                    ctx.sendMessage(Message.raw("[Hylock] Player targeting is disabled. Use /locktoggle to enable."));
+                    return;
+                }
+
                 TargetInfo target = createTargetInfoFromEntity(targetedEntity);
                 if (target != null && lockManager.lockOnTarget(playerId, target)) {
                     LOGGER.atInfo().log("[Hylock] Locked onto targeted entity: %s", target.getEntityName());

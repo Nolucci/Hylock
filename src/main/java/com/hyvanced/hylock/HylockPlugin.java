@@ -8,6 +8,7 @@ import com.hyvanced.hylock.commands.HylockResetCommand;
 import com.hyvanced.hylock.commands.HylockStatusCommand;
 import com.hyvanced.hylock.commands.LockCommand;
 import com.hyvanced.hylock.commands.LockSwitchCommand;
+import com.hyvanced.hylock.commands.LockToggleCommand;
 import com.hyvanced.hylock.commands.UnlockCommand;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.events.LockOnEventListener;
@@ -78,20 +79,28 @@ public class HylockPlugin extends JavaPlugin {
         this.getCommandRegistry().registerCommand(new LockCommand(this));
         this.getCommandRegistry().registerCommand(new UnlockCommand(this));
         this.getCommandRegistry().registerCommand(new LockSwitchCommand(this));
+        this.getCommandRegistry().registerCommand(new LockToggleCommand(this));
     }
 
     @SuppressWarnings("deprecation")
     private void registerEvents() {
+        LOGGER.atInfo().log("[Hylock] Registering event listeners...");
+
         // Register mouse button event listener for lock-on toggle
         this.getEventRegistry().register(PlayerMouseButtonEvent.class, new LockOnEventListener(this));
+        LOGGER.atInfo().log("[Hylock] Registered PlayerMouseButtonEvent listener");
 
         // Register interact event listener for auto-lock on attack
-        // Use registerGlobal since PlayerInteractEvent has KeyType=String (not Void)
+        // PlayerInteractEvent has KeyType=String, so must use registerGlobal
         this.getEventRegistry().registerGlobal(PlayerInteractEvent.class, new PlayerInteractListener(this));
+        LOGGER.atInfo().log("[Hylock] Registered PlayerInteractEvent listener (global)");
 
-        // Register mouse motion tracker to track what entity player is looking at
+        // Register mouse motion tracker - PlayerMouseMotionEvent has KeyType=Void, use register
         this.mouseTargetTracker = new MouseTargetTracker();
         this.getEventRegistry().register(PlayerMouseMotionEvent.class, this.mouseTargetTracker);
+        LOGGER.atInfo().log("[Hylock] Registered PlayerMouseMotionEvent listener");
+
+        LOGGER.atInfo().log("[Hylock] All event listeners registered successfully");
     }
 
     /**

@@ -43,6 +43,7 @@ public class HylockCommand extends CommandBase {
         ctx.sendMessage(Message.raw("  /lock - Toggle lock (fallback method)"));
         ctx.sendMessage(Message.raw("  /unlock - Release current lock"));
         ctx.sendMessage(Message.raw("  /lockswitch - Switch to next target"));
+        ctx.sendMessage(Message.raw("  /locktoggle - Toggle player targeting"));
         ctx.sendMessage(Message.raw("  /hylockstatus - View current settings"));
         ctx.sendMessage(Message.raw("  /hylockreset - Reset to defaults"));
         ctx.sendMessage(Message.raw(""));

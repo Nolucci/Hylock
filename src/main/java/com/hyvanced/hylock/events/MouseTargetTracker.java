@@ -30,10 +30,12 @@ public class MouseTargetTracker implements Consumer<PlayerMouseMotionEvent> {
     @Override
     @SuppressWarnings("removal")
     public void accept(PlayerMouseMotionEvent event) {
-        // Log every 100th event to avoid spam but confirm events are being received
+        // Log every 50th event to confirm events are being received
         eventCounter++;
-        if (eventCounter % 100 == 1) {
-            LOGGER.atInfo().log("[Hylock] MouseMotionEvent received (count: %d)", eventCounter);
+        if (eventCounter % 50 == 1) {
+            Entity target = event.getTargetEntity();
+            String targetInfo = target != null ? target.getClass().getSimpleName() : "null";
+            LOGGER.atInfo().log("[Hylock] MouseMotionEvent #%d - targetEntity: %s", eventCounter, targetInfo);
         }
 
         Player player = event.getPlayer();
