@@ -23,31 +23,34 @@ import com.hyvanced.hylock.lockon.TargetInfo;
 /**
  * Event listener for mouse input to handle lock-on targeting.
  * By default, Middle Mouse Button (scroll wheel click) toggles lock-on.
- *
- * This provides a Zelda-style experience where you can:
- * - Click middle mouse on an entity to lock onto it
- * - Click middle mouse again (or on empty space) to release lock
- * - Click middle mouse on a different entity to switch targets
  */
 public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new LockOnEventListener.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public LockOnEventListener(HylockPlugin plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * Handles mouse button events to toggle lock-on targeting.
+     *
+     * @param event the player mouse button event
+     */
     @Override
     public void accept(PlayerMouseButtonEvent event) {
-        // DEBUG: Log every mouse event received
         LOGGER.atInfo().log("[Hylock] DEBUG: Mouse event received! Button: %s, State: %s",
                 event.getMouseButton().mouseButtonType,
                 event.getMouseButton().state);
 
         HylockConfig config = plugin.getConfig();
 
-        // Check if the configured lock button was pressed
         MouseButtonType configuredButton = config.getLockButton();
         LOGGER.atInfo().log("[Hylock] DEBUG: Configured button: %s, Event button: %s",
                 configuredButton, event.getMouseButton().mouseButtonType);
@@ -57,7 +60,6 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             return;
         }
 
-        // Only trigger on button press, not release
         if (event.getMouseButton().state != MouseButtonState.Pressed) {
             LOGGER.atInfo().log("[Hylock] DEBUG: Not a press event, ignoring");
             return;
@@ -65,35 +67,37 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
 
         LOGGER.atInfo().log("[Hylock] DEBUG: Middle mouse PRESSED detected!");
 
-        // Get player info
         PlayerRef playerRef = event.getPlayerRefComponent();
         UUID playerId = playerRef.getUuid();
         LOGGER.atInfo().log("[Hylock] DEBUG: Player: %s (UUID: %s)", playerRef.getUsername(), playerId);
 
         LockOnManager lockManager = plugin.getLockOnManager();
 
-        // Get the entity the player is looking at (if any)
         Entity targetEntity = event.getTargetEntity();
         LOGGER.atInfo().log("[Hylock] DEBUG: Target entity from event: %s",
                 targetEntity != null ? targetEntity.getClass().getSimpleName() : "NULL");
 
-        // Get current lock state
         LockOnState currentState = lockManager.getState(playerId);
         LOGGER.atInfo().log("[Hylock] DEBUG: Current lock state: %s", currentState);
 
         if (targetEntity != null && isValidTarget(targetEntity, playerId, config)) {
-            // Player clicked on a valid entity
             LOGGER.atInfo().log("[Hylock] DEBUG: Valid target found, handling entity click");
             handleEntityClick(event, playerRef, playerId, targetEntity, lockManager, currentState);
         } else {
-            // Player clicked on nothing or invalid target
             LOGGER.atInfo().log("[Hylock] DEBUG: No valid target, handling empty click");
             handleEmptyClick(playerRef, playerId, lockManager, currentState);
         }
     }
 
     /**
-     * Handle when player clicks on a valid entity
+     * Handles when a player clicks on a valid entity.
+     *
+     * @param event        the mouse button event
+     * @param playerRef    the player reference
+     * @param playerId     the player's UUID
+     * @param targetEntity the clicked entity
+     * @param lockManager  the lock-on manager
+     * @param currentState the current lock state
      */
     private void handleEntityClick(PlayerMouseButtonEvent event, PlayerRef playerRef, UUID playerId,
             Entity targetEntity, LockOnManager lockManager, LockOnState currentState) {
@@ -102,30 +106,23 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
         CameraController cameraController = plugin.getCameraController();
         LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
 
-        // If already locked on this same entity, release
         if (currentState == LockOnState.LOCKED && currentTarget != null) {
-            // Check if clicking on same target
             if (isSameEntity(currentTarget, targetEntity)) {
-                // Release lock and stop camera
                 lockManager.releaseLock(playerId);
                 cameraController.stopCameraLock(playerId);
                 indicatorManager.showLockReleased(playerId);
                 return;
             }
 
-            // Different entity - switch target (release old first)
             cameraController.stopCameraLock(playerId);
             indicatorManager.showLockReleased(playerId);
             lockManager.releaseLock(playerId);
         }
 
-        // Lock onto the new target
         TargetInfo newTarget = createTargetInfo(targetEntity);
         if (lockManager.lockOnTarget(playerId, newTarget)) {
-            // Start camera lock - the CameraController tracks the PlayerRef
             cameraController.startCameraLock(playerId, playerRef);
 
-            // Try to get and store player position for camera updates
             Player player = event.getPlayer();
             if (player != null) {
                 TransformComponent playerTransform = player.getTransformComponent();
@@ -136,7 +133,6 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
                 }
             }
 
-            // Show lock indicator
             indicatorManager.showLockAcquired(playerId, playerRef, newTarget);
 
             LOGGER.atInfo().log("[Hylock] Player %s locked onto %s with camera tracking",
@@ -145,12 +141,16 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     }
 
     /**
-     * Handle when player clicks on empty space
+     * Handles when a player clicks on empty space.
+     *
+     * @param playerRef    the player reference
+     * @param playerId     the player's UUID
+     * @param lockManager  the lock-on manager
+     * @param currentState the current lock state
      */
     private void handleEmptyClick(PlayerRef playerRef, UUID playerId,
             LockOnManager lockManager, LockOnState currentState) {
         if (currentState == LockOnState.LOCKED) {
-            // Release current lock
             CameraController cameraController = plugin.getCameraController();
             LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
 
@@ -158,11 +158,15 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             cameraController.stopCameraLock(playerId);
             indicatorManager.showLockReleased(playerId);
         }
-        // If not locked, clicking on nothing does nothing
     }
 
     /**
-     * Check if an entity is a valid lock target
+     * Checks if an entity is a valid lock target.
+     *
+     * @param entity   the entity to check
+     * @param playerId the player's UUID (to prevent self-targeting)
+     * @param config   the plugin configuration
+     * @return true if the entity is a valid target
      */
     @SuppressWarnings("removal")
     private boolean isValidTarget(Entity entity, UUID playerId, HylockConfig config) {
@@ -170,23 +174,24 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             return false;
         }
 
-        // Can't lock onto yourself
         UUID entityId = entity.getUuid();
         if (entityId != null && entityId.equals(playerId)) {
             return false;
         }
 
-        // Check if we should lock onto players
         if (entity instanceof com.hypixel.hytale.server.core.entity.entities.Player) {
             return config.isLockOnPlayers();
         }
 
-        // For now, accept all other entities
         return true;
     }
 
     /**
-     * Check if the target info represents the same entity
+     * Checks if the target info represents the same entity.
+     *
+     * @param targetInfo the current target info
+     * @param entity     the entity to compare
+     * @return true if they represent the same entity
      */
     @SuppressWarnings("removal")
     private boolean isSameEntity(TargetInfo targetInfo, Entity entity) {
@@ -198,14 +203,16 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
     }
 
     /**
-     * Create a TargetInfo from an Entity
+     * Creates a TargetInfo from an Entity.
+     *
+     * @param entity the entity to create target info from
+     * @return the created TargetInfo
      */
     @SuppressWarnings("removal")
     private TargetInfo createTargetInfo(Entity entity) {
         boolean isPlayer = entity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
-        boolean isHostile = !isPlayer; // Simplified - could check actual hostility
+        boolean isHostile = !isPlayer;
 
-        // Get entity name - use display name or class name as fallback
         String entityName = entity.getLegacyDisplayName();
         if (entityName == null || entityName.isEmpty()) {
             entityName = entity.getClass().getSimpleName();
@@ -217,7 +224,6 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
                 isHostile,
                 isPlayer);
 
-        // Update position from entity's transform component
         TransformComponent transform = entity.getTransformComponent();
         if (transform != null) {
             Vector3d pos = transform.getPosition();

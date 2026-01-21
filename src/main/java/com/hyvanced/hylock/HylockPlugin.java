@@ -23,15 +23,8 @@ import com.hypixel.hytale.server.core.event.events.player.PlayerMouseButtonEvent
 import com.hypixel.hytale.server.core.event.events.player.PlayerMouseMotionEvent;
 
 /**
- * Hylock - Zelda-style target lock-on system for Hytale
- * Part of the Hyvanced plugin suite by Nolucci
- *
- * Features:
- * - Lock onto nearby hostile entities
- * - Camera follows locked target
- * - Strafe movement while locked
- * - Visual indicator on locked target
- * - Configurable lock range and behavior
+ * Hylock - Zelda-style target lock-on system for Hytale.
+ * Part of the Hyvanced plugin suite by Nolucci.
  */
 public class HylockPlugin extends JavaPlugin {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
@@ -44,6 +37,11 @@ public class HylockPlugin extends JavaPlugin {
     private CameraUpdateTask cameraUpdateTask;
     private LockIndicatorManager lockIndicatorManager;
 
+    /**
+     * Constructs a new HylockPlugin.
+     *
+     * @param init the plugin initialization data
+     */
     public HylockPlugin(JavaPluginInit init) {
         super(init);
         instance = this;
@@ -52,69 +50,62 @@ public class HylockPlugin extends JavaPlugin {
             this.getManifest().getVersion().toString());
     }
 
+    /**
+     * Sets up the plugin by initializing all components and registering commands and events.
+     */
     @Override
     protected void setup() {
-        // Initialize configuration
         this.config = new HylockConfig();
         LOGGER.atInfo().log("[Hylock] Configuration loaded");
 
-        // Initialize lock-on manager
         this.lockOnManager = new LockOnManager(this);
         LOGGER.atInfo().log("[Hylock] Lock-on manager initialized");
 
-        // Initialize camera system
         this.cameraController = new CameraController(this.config);
         LOGGER.atInfo().log("[Hylock] Camera controller initialized");
 
-        // Initialize lock indicator manager
         this.lockIndicatorManager = new LockIndicatorManager(this.config);
         LOGGER.atInfo().log("[Hylock] Lock indicator manager initialized");
 
-        // Initialize and start camera update task
         this.cameraUpdateTask = new CameraUpdateTask(this);
         this.cameraUpdateTask.start();
         LOGGER.atInfo().log("[Hylock] Camera update task started");
 
-        // Register commands
         registerCommands();
         LOGGER.atInfo().log("[Hylock] Commands registered");
 
-        // Register event listeners
         registerEvents();
         LOGGER.atInfo().log("[Hylock] Event listeners registered");
 
         LOGGER.atInfo().log("[Hylock] Plugin setup complete! Use /hylock for help or Middle Mouse to lock.");
     }
 
+    /**
+     * Registers all plugin commands.
+     */
     private void registerCommands() {
-        // Main hylock command for info and help
         this.getCommandRegistry().registerCommand(new HylockCommand(this));
-
-        // Status and reset commands
         this.getCommandRegistry().registerCommand(new HylockStatusCommand(this));
         this.getCommandRegistry().registerCommand(new HylockResetCommand(this));
-
-        // Quick lock/unlock commands
         this.getCommandRegistry().registerCommand(new LockCommand(this));
         this.getCommandRegistry().registerCommand(new UnlockCommand(this));
         this.getCommandRegistry().registerCommand(new LockSwitchCommand(this));
         this.getCommandRegistry().registerCommand(new LockToggleCommand(this));
     }
 
+    /**
+     * Registers all event listeners.
+     */
     @SuppressWarnings("deprecation")
     private void registerEvents() {
         LOGGER.atInfo().log("[Hylock] Registering event listeners...");
 
-        // Register mouse button event listener for lock-on toggle
         this.getEventRegistry().register(PlayerMouseButtonEvent.class, new LockOnEventListener(this));
         LOGGER.atInfo().log("[Hylock] Registered PlayerMouseButtonEvent listener");
 
-        // Register interact event listener for auto-lock on attack
-        // PlayerInteractEvent has KeyType=String, so must use registerGlobal
         this.getEventRegistry().registerGlobal(PlayerInteractEvent.class, new PlayerInteractListener(this));
         LOGGER.atInfo().log("[Hylock] Registered PlayerInteractEvent listener (global)");
 
-        // Register mouse motion tracker - PlayerMouseMotionEvent has KeyType=Void, use register
         this.mouseTargetTracker = new MouseTargetTracker();
         this.getEventRegistry().register(PlayerMouseMotionEvent.class, this.mouseTargetTracker);
         LOGGER.atInfo().log("[Hylock] Registered PlayerMouseMotionEvent listener");
@@ -123,56 +114,72 @@ public class HylockPlugin extends JavaPlugin {
     }
 
     /**
-     * Get the singleton instance of the plugin
+     * Returns the singleton instance of the plugin.
+     *
+     * @return the plugin instance
      */
     public static HylockPlugin getInstance() {
         return instance;
     }
 
     /**
-     * Get the lock-on manager
+     * Returns the lock-on manager.
+     *
+     * @return the lock-on manager
      */
     public LockOnManager getLockOnManager() {
         return lockOnManager;
     }
 
     /**
-     * Get the plugin configuration
+     * Returns the plugin configuration.
+     *
+     * @return the configuration
      */
     public HylockConfig getConfig() {
         return config;
     }
 
     /**
-     * Get the mouse target tracker
+     * Returns the mouse target tracker.
+     *
+     * @return the mouse target tracker
      */
     public MouseTargetTracker getMouseTargetTracker() {
         return mouseTargetTracker;
     }
 
     /**
-     * Get the plugin logger
+     * Returns the plugin logger.
+     *
+     * @return the logger
      */
     public static HytaleLogger getPluginLogger() {
         return LOGGER;
     }
 
     /**
-     * Get the camera controller
+     * Returns the camera controller.
+     *
+     * @return the camera controller
      */
     public CameraController getCameraController() {
         return cameraController;
     }
 
     /**
-     * Get the camera update task
+     * Returns the camera update task.
+     *
+     * @return the camera update task
      */
     public CameraUpdateTask getCameraUpdateTask() {
         return cameraUpdateTask;
     }
 
     /**
-     * Get the lock indicator manager
+     * Returns the lock indicator manager.
+     *
+     * @return the lock indicator manager
      */
     public LockIndicatorManager getLockIndicatorManager() {
         return lockIndicatorManager;

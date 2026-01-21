@@ -17,20 +17,24 @@ import com.hypixel.hytale.server.core.event.events.player.PlayerMouseMotionEvent
 public class MouseTargetTracker implements Consumer<PlayerMouseMotionEvent> {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
 
-    // Stores the last targeted entity for each player
     private final Map<UUID, Entity> playerTargets = new ConcurrentHashMap<>();
-
-    // Counter for debug logging (to avoid spam)
     private int eventCounter = 0;
 
+    /**
+     * Constructs a new MouseTargetTracker.
+     */
     public MouseTargetTracker() {
         LOGGER.atInfo().log("[Hylock] MouseTargetTracker created");
     }
 
+    /**
+     * Handles mouse motion events to track the entity under the player's cursor.
+     *
+     * @param event the player mouse motion event
+     */
     @Override
     @SuppressWarnings("removal")
     public void accept(PlayerMouseMotionEvent event) {
-        // Log every 50th event to confirm events are being received
         eventCounter++;
         if (eventCounter % 50 == 1) {
             Entity target = event.getTargetEntity();
@@ -42,9 +46,7 @@ public class MouseTargetTracker implements Consumer<PlayerMouseMotionEvent> {
         UUID playerId = player.getUuid();
         Entity targetEntity = event.getTargetEntity();
 
-        // Update the tracked target for this player
         if (targetEntity != null && !targetEntity.getUuid().equals(playerId)) {
-            // Only log when target changes
             Entity previousTarget = playerTargets.get(playerId);
             if (previousTarget == null || !previousTarget.getUuid().equals(targetEntity.getUuid())) {
                 String entityName = targetEntity.getLegacyDisplayName();
@@ -56,7 +58,6 @@ public class MouseTargetTracker implements Consumer<PlayerMouseMotionEvent> {
             }
             playerTargets.put(playerId, targetEntity);
         } else {
-            // Clear target if looking at nothing or self
             if (playerTargets.containsKey(playerId)) {
                 playerTargets.remove(playerId);
             }
@@ -64,16 +65,19 @@ public class MouseTargetTracker implements Consumer<PlayerMouseMotionEvent> {
     }
 
     /**
-     * Get the entity that a player is currently looking at.
-     * @param playerId The player's UUID
-     * @return The targeted entity, or null if not targeting anything
+     * Gets the entity that a player is currently looking at.
+     *
+     * @param playerId the player's UUID
+     * @return the targeted entity, or null if not targeting anything
      */
     public Entity getTargetedEntity(UUID playerId) {
         return playerTargets.get(playerId);
     }
 
     /**
-     * Clear tracked target for a player (e.g., when they disconnect).
+     * Clears the tracked target for a player.
+     *
+     * @param playerId the player's UUID
      */
     public void clearTarget(UUID playerId) {
         playerTargets.remove(playerId);

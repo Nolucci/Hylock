@@ -19,8 +19,7 @@ import com.hyvanced.hylock.lockon.TargetInfo;
 
 /**
  * Listener for player interactions (attacks) to auto-lock onto targets.
- * When a player attacks an entity, we automatically lock onto it.
- * This provides a natural way to acquire targets without requiring middle mouse button.
+ * When a player attacks an entity, the system automatically locks onto it.
  */
 @SuppressWarnings("deprecation")
 public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
@@ -28,16 +27,25 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new PlayerInteractListener.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public PlayerInteractListener(HylockPlugin plugin) {
         this.plugin = plugin;
         LOGGER.atInfo().log("[Hylock] PlayerInteractListener created");
     }
 
+    /**
+     * Handles player interaction events to auto-lock onto attacked targets.
+     *
+     * @param event the player interact event
+     */
     @Override
     public void accept(PlayerInteractEvent event) {
         LOGGER.atInfo().log("[Hylock] PlayerInteractEvent received! ActionType: %s", event.getActionType());
 
-        // Only process primary (attack) interactions
         if (event.getActionType() != InteractionType.Primary) {
             LOGGER.atInfo().log("[Hylock] Not a primary action, ignoring");
             return;
@@ -51,34 +59,27 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
 
         LOGGER.atInfo().log("[Hylock] Attack detected on entity: %s", targetEntity.getClass().getSimpleName());
 
-        // Get player info
         Player player = event.getPlayer();
         UUID playerId = player.getUuid();
         HylockConfig config = plugin.getConfig();
         LockOnManager lockManager = plugin.getLockOnManager();
 
-        // Check if we should lock this entity
         if (!isValidTarget(targetEntity, playerId, config)) {
             LOGGER.atInfo().log("[Hylock] Target is not valid for locking");
             return;
         }
 
-        // Check current lock state
         LockOnState currentState = lockManager.getState(playerId);
 
-        // If already locked on something, don't auto-switch on attack
-        // (user can manually switch with middle mouse or /lockswitch)
         if (currentState == LockOnState.LOCKED) {
             TargetInfo currentTarget = lockManager.getLockedTarget(playerId);
             if (currentTarget != null && !isSameEntity(currentTarget, targetEntity)) {
                 LOGGER.atInfo().log("[Hylock] Already locked on different target, not auto-switching");
                 return;
             }
-            // Already locked on same target, nothing to do
             return;
         }
 
-        // Lock onto the attacked entity
         TargetInfo newTarget = createTargetInfo(targetEntity);
         if (lockManager.lockOnTarget(playerId, newTarget)) {
             LOGGER.atInfo().log("[Hylock] Auto-locked onto %s via attack!", newTarget.getEntityName());
@@ -87,7 +88,12 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
     }
 
     /**
-     * Check if an entity is a valid lock target
+     * Checks if an entity is a valid lock target.
+     *
+     * @param entity   the entity to check
+     * @param playerId the player's UUID (to prevent self-targeting)
+     * @param config   the plugin configuration
+     * @return true if the entity is a valid target
      */
     @SuppressWarnings("removal")
     private boolean isValidTarget(Entity entity, UUID playerId, HylockConfig config) {
@@ -95,23 +101,24 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
             return false;
         }
 
-        // Can't lock onto yourself
         UUID entityId = entity.getUuid();
         if (entityId != null && entityId.equals(playerId)) {
             return false;
         }
 
-        // Check if we should lock onto players
         if (entity instanceof com.hypixel.hytale.server.core.entity.entities.Player) {
             return config.isLockOnPlayers();
         }
 
-        // Accept all other entities (mobs, creatures, etc.)
         return true;
     }
 
     /**
-     * Check if the target info represents the same entity
+     * Checks if the target info represents the same entity.
+     *
+     * @param targetInfo the current target info
+     * @param entity     the entity to compare
+     * @return true if they represent the same entity
      */
     @SuppressWarnings("removal")
     private boolean isSameEntity(TargetInfo targetInfo, Entity entity) {
@@ -123,14 +130,16 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
     }
 
     /**
-     * Create a TargetInfo from an Entity
+     * Creates a TargetInfo from an Entity.
+     *
+     * @param entity the entity to create target info from
+     * @return the created TargetInfo
      */
     @SuppressWarnings("removal")
     private TargetInfo createTargetInfo(Entity entity) {
         boolean isPlayer = entity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
-        boolean isHostile = !isPlayer; // Simplified - mobs are considered hostile
+        boolean isHostile = !isPlayer;
 
-        // Get entity name
         String entityName = entity.getLegacyDisplayName();
         if (entityName == null || entityName.isEmpty()) {
             entityName = entity.getClass().getSimpleName();
@@ -142,7 +151,6 @@ public class PlayerInteractListener implements Consumer<PlayerInteractEvent> {
                 isHostile,
                 isPlayer);
 
-        // Update position from entity's transform component
         TransformComponent transform = entity.getTransformComponent();
         if (transform != null) {
             Vector3d pos = transform.getPosition();

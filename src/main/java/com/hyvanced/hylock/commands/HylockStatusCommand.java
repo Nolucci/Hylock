@@ -21,20 +21,31 @@ import com.hyvanced.hylock.lockon.TargetInfo;
 
 /**
  * Command to display detailed Hylock status and settings.
- *
- * Usage:
- * /hylockstatus - Show all current settings
  */
 public class HylockStatusCommand extends AbstractPlayerCommand {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new HylockStatusCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public HylockStatusCommand(HylockPlugin plugin) {
         super("hylockstatus", "Show Hylock lock-on system settings");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the status command, displaying all current settings and lock state.
+     *
+     * @param ctx       the command context
+     * @param store     the entity store
+     * @param ref       the entity reference
+     * @param playerRef the player reference
+     * @param world     the world instance
+     */
     @Override
     protected void execute(@Nonnull CommandContext ctx,
             @Nonnull Store<EntityStore> store,
@@ -51,7 +62,6 @@ public class HylockStatusCommand extends AbstractPlayerCommand {
         ctx.sendMessage(Message.raw("═══════════════════════════════════════"));
         ctx.sendMessage(Message.raw(""));
 
-        // Current lock status
         LockOnState currentState = lockManager.getState(playerId);
         ctx.sendMessage(Message.raw("Current Lock Status:"));
         ctx.sendMessage(Message.raw("  State: " + currentState.name()));
@@ -90,6 +100,12 @@ public class HylockStatusCommand extends AbstractPlayerCommand {
         ctx.sendMessage(Message.raw("  Play Lock Sound: " + formatBoolean(config.isPlayLockSound())));
     }
 
+    /**
+     * Formats a boolean value as a human-readable string.
+     *
+     * @param value the boolean value to format
+     * @return "Enabled" if true, "Disabled" if false
+     */
     private String formatBoolean(boolean value) {
         return value ? "Enabled" : "Disabled";
     }

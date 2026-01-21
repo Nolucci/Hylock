@@ -19,19 +19,9 @@ import java.util.concurrent.TimeUnit;
 /**
  * Handles tick-based updates for the camera lock-on system.
  * Runs at a fixed rate to smoothly update camera positions for all locked players.
- *
- * The task:
- * - Updates camera rotation for each player with an active lock
- * - Checks for out-of-range targets and releases locks
- * - Updates indicators with current target distance
- *
- * Note: This task uses the last known positions stored in TargetInfo and CameraController.
- * For real-time position tracking, the positions should be updated from the main game thread.
  */
 public class CameraUpdateTask implements Runnable {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-
-    // Update rate: 20 times per second (50ms interval) for smooth camera
     private static final long UPDATE_INTERVAL_MS = 50;
 
     private final HylockPlugin plugin;
@@ -39,6 +29,11 @@ public class CameraUpdateTask implements Runnable {
     private ScheduledFuture<?> taskHandle;
     private volatile boolean running;
 
+    /**
+     * Constructs a new CameraUpdateTask.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public CameraUpdateTask(HylockPlugin plugin) {
         this.plugin = plugin;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
@@ -50,7 +45,7 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Start the camera update task.
+     * Starts the camera update task.
      */
     public void start() {
         if (running) {
@@ -62,7 +57,7 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Stop the camera update task.
+     * Stops the camera update task.
      */
     public void stop() {
         running = false;
@@ -74,7 +69,7 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Shutdown the scheduler completely.
+     * Shuts down the scheduler completely.
      */
     public void shutdown() {
         stop();
@@ -90,6 +85,9 @@ public class CameraUpdateTask implements Runnable {
         LOGGER.atInfo().log("[Hylock] Camera update scheduler shutdown complete");
     }
 
+    /**
+     * Runs the camera update task.
+     */
     @Override
     public void run() {
         if (!running) {
@@ -104,7 +102,7 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Update camera for all players with active locks.
+     * Updates the camera for all players with active locks.
      */
     private void updateAllLockedPlayers() {
         LockOnManager lockManager = plugin.getLockOnManager();
@@ -115,7 +113,6 @@ public class CameraUpdateTask implements Runnable {
             return;
         }
 
-        // Get all players with active camera locks from the CameraController
         Set<UUID> lockedPlayerIds = new HashSet<>(cameraController.getLockedPlayerIds());
 
         for (UUID playerId : lockedPlayerIds) {
@@ -129,20 +126,22 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Update camera for a single player.
+     * Updates the camera for a single player.
+     *
+     * @param playerId         the player's UUID
+     * @param lockManager      the lock-on manager
+     * @param cameraController the camera controller
+     * @param indicatorManager the indicator manager
      */
     private void updatePlayerCamera(UUID playerId, LockOnManager lockManager,
                                      CameraController cameraController, LockIndicatorManager indicatorManager) {
-        // Get the PlayerRef from CameraController
         PlayerRef playerRef = cameraController.getPlayerRef(playerId);
         if (playerRef == null) {
             cameraController.stopCameraLock(playerId);
             return;
         }
 
-        // Check if player still has a lock in the LockOnManager
         if (lockManager.getState(playerId) != LockOnState.LOCKED) {
-            // Player no longer locked, stop their camera lock
             cameraController.stopCameraLock(playerId);
             if (indicatorManager != null) {
                 indicatorManager.showLockReleased(playerId);
@@ -150,10 +149,8 @@ public class CameraUpdateTask implements Runnable {
             return;
         }
 
-        // Get target info
         TargetInfo target = lockManager.getLockedTarget(playerId);
         if (target == null || !target.isValid()) {
-            // Target invalid, release lock
             lockManager.releaseLock(playerId);
             cameraController.stopCameraLock(playerId);
             if (indicatorManager != null) {
@@ -162,20 +159,14 @@ public class CameraUpdateTask implements Runnable {
             return;
         }
 
-        // Get player's last known position from CameraController
-        // The position is updated when events occur (lock acquired, attacks, etc.)
         double[] playerPos = cameraController.getLastKnownPosition(playerId);
         if (playerPos == null) {
-            // No position available yet, use target's position as estimate
-            // This will be corrected when next event updates the position
             return;
         }
 
-        // Check distance and release if too far
         HylockConfig config = plugin.getConfig();
         double distance = target.distanceFrom(playerPos[0], playerPos[1], playerPos[2]);
         if (distance > config.getLockOnRange()) {
-            // Target out of range, release lock
             lockManager.releaseLock(playerId);
             cameraController.stopCameraLock(playerId);
             if (indicatorManager != null) {
@@ -187,20 +178,19 @@ public class CameraUpdateTask implements Runnable {
             return;
         }
 
-        // Update camera to face target
         cameraController.updateCamera(playerId, playerPos[0], playerPos[1], playerPos[2], target);
 
-        // Update indicator with current distance
         if (indicatorManager != null) {
             indicatorManager.updateIndicator(playerId, playerPos[0], playerPos[1], playerPos[2], target);
         }
 
-        // Also call lock manager update for any additional logic
         lockManager.update(playerId, playerPos[0], playerPos[1], playerPos[2]);
     }
 
     /**
-     * Check if the task is currently running.
+     * Checks if the task is currently running.
+     *
+     * @return true if running
      */
     public boolean isRunning() {
         return running;

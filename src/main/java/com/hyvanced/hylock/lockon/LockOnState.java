@@ -5,27 +5,27 @@ package com.hyvanced.hylock.lockon;
  */
 public enum LockOnState {
     /**
-     * No target is currently locked
+     * No target is currently locked.
      */
     IDLE,
 
     /**
-     * Searching for a valid target within range
+     * Searching for a valid target within range.
      */
     SEARCHING,
 
     /**
-     * A target is locked and being tracked
+     * A target is locked and being tracked.
      */
     LOCKED,
 
     /**
-     * Target was lost (died, out of range, or line of sight broken)
+     * Target was lost (died, out of range, or line of sight broken).
      */
     TARGET_LOST,
 
     /**
-     * Switching to a new target (after kill or manual switch)
+     * Switching to a new target (after kill or manual switch).
      */
     SWITCHING
 }

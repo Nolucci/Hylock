@@ -13,24 +13,19 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Manages visual indicators for locked targets.
  * Shows the player which entity is currently locked and provides feedback.
- *
- * Features:
- * - Display target name and distance in action bar or chat
- * - Show lock/unlock notifications
- * - Track indicator state per player
- *
- * Note: Full visual effects (glow, particles) require Hytale's
- * effect system APIs when they become available.
  */
 public class LockIndicatorManager {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-
-    // Update interval for indicator refresh (ms)
     private static final long INDICATOR_UPDATE_INTERVAL_MS = 500;
 
     private final HylockConfig config;
     private final Map<UUID, IndicatorState> playerIndicators;
 
+    /**
+     * Constructs a new LockIndicatorManager.
+     *
+     * @param config the Hylock configuration
+     */
     public LockIndicatorManager(HylockConfig config) {
         this.config = config;
         this.playerIndicators = new ConcurrentHashMap<>();
@@ -38,11 +33,11 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Show lock acquired indicator to player.
+     * Shows the lock acquired indicator to a player.
      *
-     * @param playerId The player's UUID
-     * @param playerRef The player reference for sending messages
-     * @param target The locked target info
+     * @param playerId  the player's UUID
+     * @param playerRef the player reference for sending messages
+     * @param target    the locked target info
      */
     public void showLockAcquired(UUID playerId, PlayerRef playerRef, TargetInfo target) {
         if (!config.isShowLockIndicator()) {
@@ -52,12 +47,10 @@ public class LockIndicatorManager {
         IndicatorState state = new IndicatorState(playerRef, target);
         playerIndicators.put(playerId, state);
 
-        // Send lock notification
         String targetType = target.isPlayer() ? "Player" : (target.isHostile() ? "Enemy" : "Entity");
         String message = String.format("§a§l⊕ LOCKED §r§7[%s] §f%s", targetType, target.getEntityName());
         sendIndicator(playerRef, message);
 
-        // Play lock sound if enabled
         if (config.isPlayLockSound()) {
             playLockSound(playerRef, true);
         }
@@ -66,9 +59,9 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Show lock released indicator to player.
+     * Shows the lock released indicator to a player.
      *
-     * @param playerId The player's UUID
+     * @param playerId the player's UUID
      */
     public void showLockReleased(UUID playerId) {
         IndicatorState state = playerIndicators.remove(playerId);
@@ -79,7 +72,6 @@ public class LockIndicatorManager {
         String message = "§c§l⊗ UNLOCKED";
         sendIndicator(state.playerRef, message);
 
-        // Play unlock sound if enabled
         if (config.isPlayLockSound()) {
             playLockSound(state.playerRef, false);
         }
@@ -88,13 +80,13 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Update the indicator with current target info (distance, health, etc.)
+     * Updates the indicator with current target info.
      *
-     * @param playerId The player's UUID
-     * @param playerX Player's current X position
-     * @param playerY Player's current Y position
-     * @param playerZ Player's current Z position
-     * @param target The current locked target
+     * @param playerId the player's UUID
+     * @param playerX  player's current X position
+     * @param playerY  player's current Y position
+     * @param playerZ  player's current Z position
+     * @param target   the current locked target
      */
     public void updateIndicator(UUID playerId, double playerX, double playerY, double playerZ, TargetInfo target) {
         IndicatorState state = playerIndicators.get(playerId);
@@ -102,20 +94,15 @@ public class LockIndicatorManager {
             return;
         }
 
-        // Check if enough time has passed since last update
         long now = System.currentTimeMillis();
         if (now - state.lastUpdateTime < INDICATOR_UPDATE_INTERVAL_MS) {
             return;
         }
         state.lastUpdateTime = now;
 
-        // Calculate distance
         double distance = target.distanceFrom(playerX, playerY, playerZ);
-
-        // Format distance color based on range
         String distanceColor = getDistanceColor(distance);
 
-        // Build indicator message
         String targetType = target.isPlayer() ? "§b" : (target.isHostile() ? "§c" : "§e");
         String message = String.format("§7⊕ %s%s §7| %s%.1fm",
             targetType, target.getEntityName(),
@@ -125,10 +112,10 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Show target lost indicator (target died, despawned, etc.)
+     * Shows the target lost indicator to a player.
      *
-     * @param playerId The player's UUID
-     * @param reason The reason the target was lost
+     * @param playerId the player's UUID
+     * @param reason   the reason the target was lost
      */
     public void showTargetLost(UUID playerId, String reason) {
         IndicatorState state = playerIndicators.remove(playerId);
@@ -143,29 +130,32 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Get color code based on distance to target.
+     * Gets the color code based on distance to target.
+     *
+     * @param distance the distance to the target
+     * @return the color code string
      */
     private String getDistanceColor(double distance) {
         double maxRange = config.getLockOnRange();
         double ratio = distance / maxRange;
 
         if (ratio < 0.5) {
-            return "§a"; // Green - close
+            return "§a";
         } else if (ratio < 0.75) {
-            return "§e"; // Yellow - medium
+            return "§e";
         } else {
-            return "§c"; // Red - far (about to lose lock)
+            return "§c";
         }
     }
 
     /**
-     * Send indicator message to player.
-     * Uses action bar for non-intrusive display.
+     * Sends an indicator message to a player.
+     *
+     * @param playerRef the player reference
+     * @param message   the message to send
      */
     private void sendIndicator(PlayerRef playerRef, String message) {
         try {
-            // Send as regular message for now
-            // TODO: Use action bar when API is available
             playerRef.sendMessage(Message.raw(message));
         } catch (Exception e) {
             LOGGER.atWarning().log("[Hylock] Failed to send indicator: %s", e.getMessage());
@@ -173,24 +163,28 @@ public class LockIndicatorManager {
     }
 
     /**
-     * Play lock/unlock sound effect.
+     * Plays the lock/unlock sound effect.
+     *
+     * @param playerRef the player reference
+     * @param isLock    true for lock sound, false for unlock sound
      */
     private void playLockSound(PlayerRef playerRef, boolean isLock) {
-        // TODO: Implement sound playback when Hytale sound API is available
-        // For now, this is a placeholder
-        // String soundId = isLock ? "hylock:lock_on" : "hylock:lock_off";
-        // playerRef.playSound(soundId);
     }
 
     /**
-     * Clean up indicator state for a disconnected player.
+     * Cleans up indicator state for a disconnected player.
+     *
+     * @param playerId the player's UUID
      */
     public void removePlayer(UUID playerId) {
         playerIndicators.remove(playerId);
     }
 
     /**
-     * Check if a player has an active indicator.
+     * Checks if a player has an active indicator.
+     *
+     * @param playerId the player's UUID
+     * @return true if the player has an active indicator
      */
     public boolean hasIndicator(UUID playerId) {
         return playerIndicators.containsKey(playerId);
@@ -204,6 +198,12 @@ public class LockIndicatorManager {
         final TargetInfo target;
         long lastUpdateTime;
 
+        /**
+         * Constructs a new IndicatorState.
+         *
+         * @param playerRef the player reference
+         * @param target    the locked target info
+         */
         IndicatorState(PlayerRef playerRef, TargetInfo target) {
             this.playerRef = playerRef;
             this.target = target;

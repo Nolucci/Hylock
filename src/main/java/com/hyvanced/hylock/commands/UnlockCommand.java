@@ -20,22 +20,31 @@ import com.hyvanced.hylock.lockon.TargetInfo;
 
 /**
  * Quick command to release the current lock-on target.
- *
- * Usage:
- * /unlock - Release current lock
- *
- * This command is designed to be bound to a key for quick access.
  */
 public class UnlockCommand extends AbstractPlayerCommand {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new UnlockCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public UnlockCommand(HylockPlugin plugin) {
         super("unlock", "Release the current lock-on target (Hylock)");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the unlock command to release the current lock.
+     *
+     * @param ctx       the command context
+     * @param store     the entity store
+     * @param ref       the entity reference
+     * @param playerRef the player reference
+     * @param world     the world instance
+     */
     @Override
     protected void execute(@Nonnull CommandContext ctx,
             @Nonnull Store<EntityStore> store,
@@ -46,7 +55,6 @@ public class UnlockCommand extends AbstractPlayerCommand {
         LockOnManager lockManager = plugin.getLockOnManager();
         UUID playerId = playerRef.getUuid();
 
-        // Check if player has an active lock
         LockOnState currentState = lockManager.getState(playerId);
 
         if (currentState != LockOnState.LOCKED) {
@@ -54,11 +62,9 @@ public class UnlockCommand extends AbstractPlayerCommand {
             return;
         }
 
-        // Get target name before releasing for feedback
         TargetInfo target = lockManager.getLockedTarget(playerId);
         String targetName = target != null ? target.getEntityName() : "Unknown";
 
-        // Release the lock
         lockManager.releaseLock(playerId);
 
         ctx.sendMessage(Message.raw("[Hylock] Released lock on " + targetName));

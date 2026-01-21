@@ -19,12 +19,6 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Controls the camera for players with locked targets.
  * Handles smooth camera interpolation to follow locked entities.
- *
- * The camera system:
- * - Smoothly rotates to face the locked target
- * - Works in both first-person and third-person views
- * - Uses Hytale's native lerp for smooth transitions
- * - Automatically releases when target is out of range
  */
 public class CameraController {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
@@ -32,6 +26,11 @@ public class CameraController {
     private final HylockConfig config;
     private final Map<UUID, CameraState> playerCameraStates;
 
+    /**
+     * Constructs a new CameraController.
+     *
+     * @param config the Hylock configuration
+     */
     public CameraController(HylockConfig config) {
         this.config = config;
         this.playerCameraStates = new ConcurrentHashMap<>();
@@ -39,10 +38,10 @@ public class CameraController {
     }
 
     /**
-     * Start camera lock for a player targeting an entity.
+     * Starts camera lock for a player targeting an entity.
      *
-     * @param playerId The player's UUID
-     * @param playerRef The player reference for sending packets
+     * @param playerId  the player's UUID
+     * @param playerRef the player reference for sending packets
      */
     public void startCameraLock(UUID playerId, PlayerRef playerRef) {
         CameraState state = new CameraState(playerRef);
@@ -51,28 +50,26 @@ public class CameraController {
     }
 
     /**
-     * Stop camera lock for a player and reset to normal camera.
+     * Stops camera lock for a player and resets to normal camera.
      *
-     * @param playerId The player's UUID
+     * @param playerId the player's UUID
      */
     public void stopCameraLock(UUID playerId) {
         CameraState state = playerCameraStates.remove(playerId);
         if (state != null && state.playerRef != null) {
-            // Reset camera to default (player-controlled)
             resetCamera(state.playerRef);
             LOGGER.atInfo().log("[Hylock] Camera lock stopped for player %s", playerId);
         }
     }
 
     /**
-     * Update the camera for a player to look at their locked target.
-     * Should be called every tick for smooth camera movement.
+     * Updates the camera for a player to look at their locked target.
      *
-     * @param playerId The player's UUID
-     * @param playerX Player's current X position
-     * @param playerY Player's current Y position
-     * @param playerZ Player's current Z position
-     * @param target The locked target info
+     * @param playerId the player's UUID
+     * @param playerX  player's current X position
+     * @param playerY  player's current Y position
+     * @param playerZ  player's current Z position
+     * @param target   the locked target info
      * @return true if camera was updated, false if player has no camera lock
      */
     public boolean updateCamera(UUID playerId, double playerX, double playerY, double playerZ, TargetInfo target) {
@@ -81,50 +78,44 @@ public class CameraController {
             return false;
         }
 
-        // Calculate direction to target
         double targetX = target.getLastKnownX();
         double targetY = target.getLastKnownY() + config.getCameraHeightOffset();
         double targetZ = target.getLastKnownZ();
 
         double playerEyeY = playerY + config.getCameraHeightOffset();
 
-        // Calculate yaw (horizontal angle)
         double dx = targetX - playerX;
         double dz = targetZ - playerZ;
         float targetYaw = (float) Math.toDegrees(Math.atan2(-dx, dz));
 
-        // Calculate pitch (vertical angle)
         double dy = targetY - playerEyeY;
         double horizontalDist = Math.sqrt(dx * dx + dz * dz);
         float targetPitch = (float) Math.toDegrees(-Math.atan2(dy, horizontalDist));
 
-        // Clamp pitch to reasonable values
         targetPitch = Math.max(-89.0f, Math.min(89.0f, targetPitch));
 
-        // Apply smooth interpolation locally (for tracking state)
         float smoothing = (float) config.getCameraSmoothing();
         float currentYaw = state.currentYaw;
         float currentPitch = state.currentPitch;
 
-        // Smooth yaw (handle wraparound at 180/-180 degrees)
         float yawDiff = normalizeAngle(targetYaw - currentYaw);
         float newYaw = currentYaw + yawDiff * (1.0f - smoothing);
 
-        // Smooth pitch
         float newPitch = currentPitch + (targetPitch - currentPitch) * (1.0f - smoothing);
 
-        // Store the new values
         state.currentYaw = normalizeAngle(newYaw);
         state.currentPitch = newPitch;
 
-        // Apply camera rotation using Hytale's camera packet system
         applyCameraRotation(state.playerRef, state.currentYaw, state.currentPitch);
 
         return true;
     }
 
     /**
-     * Normalize angle to be within -180 to 180 degrees
+     * Normalizes an angle to be within -180 to 180 degrees.
+     *
+     * @param angle the angle to normalize
+     * @return the normalized angle
      */
     private float normalizeAngle(float angle) {
         while (angle > 180.0f) angle -= 360.0f;
@@ -133,36 +124,30 @@ public class CameraController {
     }
 
     /**
-     * Apply camera rotation to a player using Hytale's camera packet system.
+     * Applies camera rotation to a player using Hytale's camera packet system.
+     *
+     * @param playerRef   the player reference
+     * @param yawDegrees  the yaw angle in degrees
+     * @param pitchDegrees the pitch angle in degrees
      */
     private void applyCameraRotation(PlayerRef playerRef, float yawDegrees, float pitchDegrees) {
         try {
-            // Convert to radians for Hytale's Direction class
             float yawRadians = (float) Math.toRadians(yawDegrees);
             float pitchRadians = (float) Math.toRadians(pitchDegrees);
 
-            // Create camera settings with custom rotation
             ServerCameraSettings settings = new ServerCameraSettings();
 
-            // Set the rotation using Direction (yaw, pitch, roll) in radians
             settings.rotation = new Direction(yawRadians, pitchRadians, 0.0f);
-
-            // Use custom rotation type to apply our rotation
             settings.rotationType = RotationType.Custom;
 
-            // Apply smooth interpolation using Hytale's native lerp
-            // Lower values = smoother but slower response (0.0-1.0)
             float lerpSpeed = 1.0f - (float) config.getCameraSmoothing();
             lerpSpeed = Math.max(0.05f, Math.min(0.95f, lerpSpeed));
             settings.rotationLerpSpeed = lerpSpeed;
             settings.positionLerpSpeed = lerpSpeed;
 
-            // Send camera packet to player
-            // ClientCameraView.Custom = full server control
-            // true = override player camera input
             SetServerCamera packet = new SetServerCamera(
                 ClientCameraView.Custom,
-                true,  // Lock camera control
+                true,
                 settings
             );
 
@@ -177,16 +162,16 @@ public class CameraController {
     }
 
     /**
-     * Reset camera to normal player-controlled mode.
+     * Resets the camera to normal player-controlled mode.
+     *
+     * @param playerRef the player reference
      */
     private void resetCamera(PlayerRef playerRef) {
         try {
-            // Return to player-controlled camera
-            // Pass false to unlock camera control and null for default settings
             SetServerCamera packet = new SetServerCamera(
                 ClientCameraView.Custom,
-                false,  // Don't lock camera - return control to player
-                null    // Use default settings
+                false,
+                null
             );
 
             playerRef.getPacketHandler().writeNoCache(packet);
@@ -198,14 +183,20 @@ public class CameraController {
     }
 
     /**
-     * Check if a player has an active camera lock.
+     * Checks if a player has an active camera lock.
+     *
+     * @param playerId the player's UUID
+     * @return true if the player has an active lock
      */
     public boolean hasActiveLock(UUID playerId) {
         return playerCameraStates.containsKey(playerId);
     }
 
     /**
-     * Get current camera yaw for a player.
+     * Gets the current camera yaw for a player.
+     *
+     * @param playerId the player's UUID
+     * @return the current yaw in degrees
      */
     public float getCurrentYaw(UUID playerId) {
         CameraState state = playerCameraStates.get(playerId);
@@ -213,7 +204,10 @@ public class CameraController {
     }
 
     /**
-     * Get current camera pitch for a player.
+     * Gets the current camera pitch for a player.
+     *
+     * @param playerId the player's UUID
+     * @return the current pitch in degrees
      */
     public float getCurrentPitch(UUID playerId) {
         CameraState state = playerCameraStates.get(playerId);
@@ -221,21 +215,28 @@ public class CameraController {
     }
 
     /**
-     * Clean up camera state for a disconnected player.
+     * Cleans up camera state for a disconnected player.
+     *
+     * @param playerId the player's UUID
      */
     public void removePlayer(UUID playerId) {
         playerCameraStates.remove(playerId);
     }
 
     /**
-     * Get all player IDs that currently have active camera locks.
+     * Gets all player IDs that currently have active camera locks.
+     *
+     * @return an unmodifiable set of player UUIDs
      */
     public Set<UUID> getLockedPlayerIds() {
         return Collections.unmodifiableSet(playerCameraStates.keySet());
     }
 
     /**
-     * Get the PlayerRef for a player with an active camera lock.
+     * Gets the PlayerRef for a player with an active camera lock.
+     *
+     * @param playerId the player's UUID
+     * @return the player reference, or null if no active lock
      */
     public PlayerRef getPlayerRef(UUID playerId) {
         CameraState state = playerCameraStates.get(playerId);
@@ -243,8 +244,10 @@ public class CameraController {
     }
 
     /**
-     * Get the last known position for a player.
-     * Returns null if no position has been recorded.
+     * Gets the last known position for a player.
+     *
+     * @param playerId the player's UUID
+     * @return an array of [x, y, z] coordinates, or null if no position recorded
      */
     public double[] getLastKnownPosition(UUID playerId) {
         CameraState state = playerCameraStates.get(playerId);
@@ -255,8 +258,12 @@ public class CameraController {
     }
 
     /**
-     * Update the last known position for a player.
-     * Should be called when position data is available from events.
+     * Updates the last known position for a player.
+     *
+     * @param playerId the player's UUID
+     * @param x        the X coordinate
+     * @param y        the Y coordinate
+     * @param z        the Z coordinate
      */
     public void updatePlayerPosition(UUID playerId, double x, double y, double z) {
         CameraState state = playerCameraStates.get(playerId);
@@ -280,6 +287,11 @@ public class CameraController {
         double lastZ;
         boolean hasPosition;
 
+        /**
+         * Constructs a new CameraState.
+         *
+         * @param playerRef the player reference
+         */
         CameraState(PlayerRef playerRef) {
             this.playerRef = playerRef;
             this.currentYaw = 0f;

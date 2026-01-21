@@ -10,20 +10,27 @@ import com.hyvanced.hylock.HylockPlugin;
 
 /**
  * Command to reset all Hylock settings to their defaults.
- *
- * Usage:
- * /hylockreset - Reset all settings to defaults
  */
 public class HylockResetCommand extends CommandBase {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new HylockResetCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public HylockResetCommand(HylockPlugin plugin) {
         super("hylockreset", "Reset Hylock settings to defaults");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the reset command, restoring all settings to default values.
+     *
+     * @param ctx the command context
+     */
     @Override
     protected void executeSync(@Nonnull CommandContext ctx) {
         plugin.getConfig().resetToDefaults();

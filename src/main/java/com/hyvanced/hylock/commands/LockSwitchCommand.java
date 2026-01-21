@@ -20,22 +20,31 @@ import com.hyvanced.hylock.lockon.TargetInfo;
 
 /**
  * Command to switch to the next target while locked.
- *
- * Usage:
- * /lockswitch - Switch to the next available target
- *
- * This command is designed to be bound to a key for quick target switching.
  */
 public class LockSwitchCommand extends AbstractPlayerCommand {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new LockSwitchCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public LockSwitchCommand(HylockPlugin plugin) {
         super("lockswitch", "Switch to the next lock-on target (Hylock)");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the switch command, changing to the next available target.
+     *
+     * @param ctx       the command context
+     * @param store     the entity store
+     * @param ref       the entity reference
+     * @param playerRef the player reference
+     * @param world     the world instance
+     */
     @Override
     protected void execute(@Nonnull CommandContext ctx,
             @Nonnull Store<EntityStore> store,

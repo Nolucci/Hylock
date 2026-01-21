@@ -24,18 +24,19 @@ import com.hyvanced.hylock.lockon.LockOnState;
 import com.hyvanced.hylock.lockon.TargetInfo;
 
 /**
- * Command to lock onto the nearest valid target.
- * This is a backup method - prefer using the configured keybind (Middle Mouse
- * by default).
- *
- * Usage:
- * /lock - Toggle lock on nearest target in view
+ * Command to toggle lock onto the nearest valid target.
+ * This is a backup method - prefer using the configured keybind (Middle Mouse by default).
  */
 public class LockCommand extends AbstractPlayerCommand {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new LockCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public LockCommand(HylockPlugin plugin) {
         super("lock", "Toggle lock onto the nearest target (Hylock)");
         this.setPermissionGroup(GameMode.Adventure);
@@ -43,6 +44,15 @@ public class LockCommand extends AbstractPlayerCommand {
         LOGGER.atInfo().log("[Hylock] LockCommand registered");
     }
 
+    /**
+     * Executes the lock command to toggle targeting on the nearest entity.
+     *
+     * @param ctx       the command context
+     * @param store     the entity store
+     * @param ref       the entity reference
+     * @param playerRef the player reference
+     * @param world     the world instance
+     */
     @Override
     protected void execute(@Nonnull CommandContext ctx,
             @Nonnull Store<EntityStore> store,
@@ -56,7 +66,6 @@ public class LockCommand extends AbstractPlayerCommand {
         UUID playerId = playerRef.getUuid();
         LOGGER.atInfo().log("[Hylock] Player UUID: %s", playerId);
 
-        // Check current state - if locked, toggle off
         LockOnState currentState = lockManager.getState(playerId);
         LOGGER.atInfo().log("[Hylock] Current lock state: %s", currentState);
 
@@ -69,14 +78,12 @@ public class LockCommand extends AbstractPlayerCommand {
             return;
         }
 
-        // First, try to lock onto what the player is looking at (from MouseTargetTracker)
         MouseTargetTracker tracker = plugin.getMouseTargetTracker();
         if (tracker != null) {
             Entity targetedEntity = tracker.getTargetedEntity(playerId);
             if (targetedEntity != null) {
                 LOGGER.atInfo().log("[Hylock] Found targeted entity from mouse tracker!");
 
-                // Check if targeting players is allowed
                 boolean isTargetPlayer = targetedEntity instanceof com.hypixel.hytale.server.core.entity.entities.Player;
                 if (isTargetPlayer && !plugin.getConfig().isLockOnPlayers()) {
                     LOGGER.atInfo().log("[Hylock] Player targeting is disabled, skipping player target");
@@ -95,7 +102,6 @@ public class LockCommand extends AbstractPlayerCommand {
             }
         }
 
-        // Fallback: Get player position and search for nearby players
         LOGGER.atInfo().log("[Hylock] Getting player transform component...");
         TransformComponent transform = store.getComponent(ref, TransformComponent.getComponentType());
         if (transform == null) {
@@ -110,7 +116,6 @@ public class LockCommand extends AbstractPlayerCommand {
 
         ctx.sendMessage(Message.raw("[Hylock] Searching for target..."));
 
-        // Use the LockOnManager to find and lock target (searches players only)
         LOGGER.atInfo().log("[Hylock] Calling tryLockOnFromWorld...");
         boolean found = plugin.getLockOnManager().tryLockOnFromWorld(
                 playerId, store, ref, world,
@@ -132,7 +137,10 @@ public class LockCommand extends AbstractPlayerCommand {
     }
 
     /**
-     * Create a TargetInfo from an Entity
+     * Creates a TargetInfo from an Entity.
+     *
+     * @param entity the entity to create target info from
+     * @return the created TargetInfo, or null if entity is null
      */
     @SuppressWarnings("removal")
     private TargetInfo createTargetInfoFromEntity(Entity entity) {
@@ -154,7 +162,6 @@ public class LockCommand extends AbstractPlayerCommand {
                 isHostile,
                 isPlayer);
 
-        // Update position from entity's transform component
         TransformComponent transform = entity.getTransformComponent();
         if (transform != null) {
             Vector3d pos = transform.getPosition();

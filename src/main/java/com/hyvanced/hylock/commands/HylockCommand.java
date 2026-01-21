@@ -11,26 +11,40 @@ import com.hyvanced.hylock.config.HylockConfig;
 
 /**
  * Main command for the Hylock plugin.
- * Shows help and current status.
- *
- * Usage:
- * /hylock - Show help and current status
+ * Provides help information and displays current lock-on system status.
  */
 public class HylockCommand extends CommandBase {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new HylockCommand.
+     *
+     * @param plugin the Hylock plugin instance used to access configuration and manifest
+     */
     public HylockCommand(HylockPlugin plugin) {
         super("hylock", "Hylock lock-on system - Zelda-style targeting for Hytale combat");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the hylock command synchronously.
+     * Displays plugin information and current settings to the command sender.
+     *
+     * @param ctx the command context containing sender information and utilities
+     */
     @Override
     protected void executeSync(@Nonnull CommandContext ctx) {
         showInfo(ctx);
     }
 
+    /**
+     * Displays comprehensive plugin information including available commands,
+     * usage instructions, and current configuration settings.
+     *
+     * @param ctx the command context used to send messages to the player
+     */
     private void showInfo(CommandContext ctx) {
         HylockConfig config = plugin.getConfig();
 
@@ -63,6 +77,12 @@ public class HylockCommand extends CommandBase {
         ctx.sendMessage(Message.raw("Version: " + plugin.getManifest().getVersion().toString()));
     }
 
+    /**
+     * Formats a boolean value as a human-readable string.
+     *
+     * @param value the boolean value to format
+     * @return "Enabled" if true, "Disabled" if false
+     */
     private String formatBoolean(boolean value) {
         return value ? "Enabled" : "Disabled";
     }

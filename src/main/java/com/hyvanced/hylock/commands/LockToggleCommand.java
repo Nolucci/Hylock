@@ -10,21 +10,28 @@ import com.hyvanced.hylock.HylockPlugin;
 import com.hyvanced.hylock.config.HylockConfig;
 
 /**
- * Command to toggle player targeting on/off.
- *
- * Usage:
- * /locktoggle - Toggle player targeting
+ * Command to toggle player targeting on or off.
  */
 public class LockToggleCommand extends CommandBase {
 
     private final HylockPlugin plugin;
 
+    /**
+     * Constructs a new LockToggleCommand.
+     *
+     * @param plugin the Hylock plugin instance
+     */
     public LockToggleCommand(HylockPlugin plugin) {
         super("locktoggle", "Toggle player targeting for lock-on");
         this.setPermissionGroup(GameMode.Adventure);
         this.plugin = plugin;
     }
 
+    /**
+     * Executes the toggle command, switching player targeting on or off.
+     *
+     * @param ctx the command context
+     */
     @Override
     protected void executeSync(@Nonnull CommandContext ctx) {
         HylockConfig config = plugin.getConfig();
