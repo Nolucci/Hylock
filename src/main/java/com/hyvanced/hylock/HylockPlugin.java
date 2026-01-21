@@ -10,6 +10,9 @@ import com.hyvanced.hylock.commands.LockCommand;
 import com.hyvanced.hylock.commands.LockSwitchCommand;
 import com.hyvanced.hylock.commands.LockToggleCommand;
 import com.hyvanced.hylock.commands.UnlockCommand;
+import com.hyvanced.hylock.camera.CameraController;
+import com.hyvanced.hylock.camera.CameraUpdateTask;
+import com.hyvanced.hylock.camera.LockIndicatorManager;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.events.LockOnEventListener;
 import com.hyvanced.hylock.events.MouseTargetTracker;
@@ -37,6 +40,9 @@ public class HylockPlugin extends JavaPlugin {
     private LockOnManager lockOnManager;
     private HylockConfig config;
     private MouseTargetTracker mouseTargetTracker;
+    private CameraController cameraController;
+    private CameraUpdateTask cameraUpdateTask;
+    private LockIndicatorManager lockIndicatorManager;
 
     public HylockPlugin(JavaPluginInit init) {
         super(init);
@@ -55,6 +61,19 @@ public class HylockPlugin extends JavaPlugin {
         // Initialize lock-on manager
         this.lockOnManager = new LockOnManager(this);
         LOGGER.atInfo().log("[Hylock] Lock-on manager initialized");
+
+        // Initialize camera system
+        this.cameraController = new CameraController(this.config);
+        LOGGER.atInfo().log("[Hylock] Camera controller initialized");
+
+        // Initialize lock indicator manager
+        this.lockIndicatorManager = new LockIndicatorManager(this.config);
+        LOGGER.atInfo().log("[Hylock] Lock indicator manager initialized");
+
+        // Initialize and start camera update task
+        this.cameraUpdateTask = new CameraUpdateTask(this);
+        this.cameraUpdateTask.start();
+        LOGGER.atInfo().log("[Hylock] Camera update task started");
 
         // Register commands
         registerCommands();
@@ -136,5 +155,26 @@ public class HylockPlugin extends JavaPlugin {
      */
     public static HytaleLogger getPluginLogger() {
         return LOGGER;
+    }
+
+    /**
+     * Get the camera controller
+     */
+    public CameraController getCameraController() {
+        return cameraController;
+    }
+
+    /**
+     * Get the camera update task
+     */
+    public CameraUpdateTask getCameraUpdateTask() {
+        return cameraUpdateTask;
+    }
+
+    /**
+     * Get the lock indicator manager
+     */
+    public LockIndicatorManager getLockIndicatorManager() {
+        return lockIndicatorManager;
     }
 }

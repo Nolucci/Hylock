@@ -7,12 +7,14 @@ import com.hypixel.hytale.logger.HytaleLogger;
 import com.hypixel.hytale.math.vector.Vector3d;
 import com.hypixel.hytale.protocol.MouseButtonState;
 import com.hypixel.hytale.protocol.MouseButtonType;
-import com.hypixel.hytale.server.core.Message;
 import com.hypixel.hytale.server.core.entity.Entity;
+import com.hypixel.hytale.server.core.entity.entities.Player;
 import com.hypixel.hytale.server.core.event.events.player.PlayerMouseButtonEvent;
 import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
 import com.hypixel.hytale.server.core.universe.PlayerRef;
 import com.hyvanced.hylock.HylockPlugin;
+import com.hyvanced.hylock.camera.CameraController;
+import com.hyvanced.hylock.camera.LockIndicatorManager;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.lockon.LockOnManager;
 import com.hyvanced.hylock.lockon.LockOnState;
@@ -97,26 +99,48 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             Entity targetEntity, LockOnManager lockManager, LockOnState currentState) {
 
         TargetInfo currentTarget = lockManager.getLockedTarget(playerId);
+        CameraController cameraController = plugin.getCameraController();
+        LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
 
         // If already locked on this same entity, release
         if (currentState == LockOnState.LOCKED && currentTarget != null) {
             // Check if clicking on same target
             if (isSameEntity(currentTarget, targetEntity)) {
+                // Release lock and stop camera
                 lockManager.releaseLock(playerId);
-                sendMessage(playerRef, "[Hylock] Lock released.");
+                cameraController.stopCameraLock(playerId);
+                indicatorManager.showLockReleased(playerId);
                 return;
             }
 
-            // Different entity - switch target
+            // Different entity - switch target (release old first)
+            cameraController.stopCameraLock(playerId);
+            indicatorManager.showLockReleased(playerId);
             lockManager.releaseLock(playerId);
         }
 
         // Lock onto the new target
         TargetInfo newTarget = createTargetInfo(targetEntity);
         if (lockManager.lockOnTarget(playerId, newTarget)) {
-            sendMessage(playerRef, "[Hylock] Locked onto " + newTarget.getEntityName());
-            LOGGER.atInfo().log("[Hylock] Player %s locked onto %s", playerRef.getUsername(),
-                    newTarget.getEntityName());
+            // Start camera lock - the CameraController tracks the PlayerRef
+            cameraController.startCameraLock(playerId, playerRef);
+
+            // Try to get and store player position for camera updates
+            Player player = event.getPlayer();
+            if (player != null) {
+                TransformComponent playerTransform = player.getTransformComponent();
+                if (playerTransform != null) {
+                    Vector3d playerPos = playerTransform.getPosition();
+                    cameraController.updatePlayerPosition(playerId,
+                        playerPos.getX(), playerPos.getY(), playerPos.getZ());
+                }
+            }
+
+            // Show lock indicator
+            indicatorManager.showLockAcquired(playerId, playerRef, newTarget);
+
+            LOGGER.atInfo().log("[Hylock] Player %s locked onto %s with camera tracking",
+                    playerRef.getUsername(), newTarget.getEntityName());
         }
     }
 
@@ -127,10 +151,12 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             LockOnManager lockManager, LockOnState currentState) {
         if (currentState == LockOnState.LOCKED) {
             // Release current lock
-            TargetInfo currentTarget = lockManager.getLockedTarget(playerId);
-            String targetName = currentTarget != null ? currentTarget.getEntityName() : "target";
+            CameraController cameraController = plugin.getCameraController();
+            LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
+
             lockManager.releaseLock(playerId);
-            sendMessage(playerRef, "[Hylock] Released lock on " + targetName);
+            cameraController.stopCameraLock(playerId);
+            indicatorManager.showLockReleased(playerId);
         }
         // If not locked, clicking on nothing does nothing
     }
@@ -199,12 +225,5 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
         }
 
         return info;
-    }
-
-    /**
-     * Send a message to the player
-     */
-    private void sendMessage(PlayerRef playerRef, String message) {
-        playerRef.sendMessage(Message.raw(message));
     }
 }
