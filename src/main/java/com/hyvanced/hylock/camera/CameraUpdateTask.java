@@ -1,42 +1,50 @@
 package com.hyvanced.hylock.camera;
 
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.component.Store;
 import com.hypixel.hytale.logger.HytaleLogger;
-import com.hypixel.hytale.server.core.universe.PlayerRef;
+import com.hypixel.hytale.math.vector.Vector3d;
+import com.hypixel.hytale.server.core.modules.entity.component.TransformComponent;
+import com.hypixel.hytale.server.core.universe.world.World;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hyvanced.hylock.HylockPlugin;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.lockon.LockOnManager;
 import com.hyvanced.hylock.lockon.LockOnState;
 import com.hyvanced.hylock.lockon.TargetInfo;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-
 /**
  * Handles tick-based updates for the camera lock-on system.
- * Runs at a fixed rate to smoothly update camera positions for all locked players.
+ * Uses a hybrid approach: position reading on WorldThread, packet sending on
+ * scheduler thread.
  */
 public class CameraUpdateTask implements Runnable {
     private static final HytaleLogger LOGGER = HytaleLogger.forEnclosingClass();
-    private static final long UPDATE_INTERVAL_MS = 50;
+    private static final long UPDATE_INTERVAL_MS = 2; // Plus fréquent pour une meilleure fluidité
+    private static final long POSITION_UPDATE_INTERVAL_MS = 16; // ~60 times per second for position sync
 
     private final HylockPlugin plugin;
     private final ScheduledExecutorService scheduler;
     private ScheduledFuture<?> taskHandle;
+    private ScheduledFuture<?> positionTaskHandle;
     private volatile boolean running;
 
-    /**
-     * Constructs a new CameraUpdateTask.
-     *
-     * @param plugin the Hylock plugin instance
-     */
+    // Cached positions updated by WorldThread
+    private final Map<UUID, CachedPositions> positionCache = new ConcurrentHashMap<>();
+
     public CameraUpdateTask(HylockPlugin plugin) {
         this.plugin = plugin;
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        this.scheduler = Executors.newScheduledThreadPool(2, r -> {
             Thread t = new Thread(r, "Hylock-CameraUpdate");
             t.setDaemon(true);
             return t;
@@ -44,33 +52,34 @@ public class CameraUpdateTask implements Runnable {
         this.running = false;
     }
 
-    /**
-     * Starts the camera update task.
-     */
     public void start() {
         if (running) {
             return;
         }
         running = true;
+        // Fast task for sending camera updates
         taskHandle = scheduler.scheduleAtFixedRate(this, 0, UPDATE_INTERVAL_MS, TimeUnit.MILLISECONDS);
-        LOGGER.atInfo().log("[Hylock] Camera update task started (interval: %dms)", UPDATE_INTERVAL_MS);
+        // Slower task for syncing positions from WorldThread
+        positionTaskHandle = scheduler.scheduleAtFixedRate(this::syncPositionsFromWorld, 0, POSITION_UPDATE_INTERVAL_MS,
+                TimeUnit.MILLISECONDS);
+        LOGGER.atInfo().log("[Hylock] Camera update task started (camera: %dms, positions: %dms)",
+                UPDATE_INTERVAL_MS, POSITION_UPDATE_INTERVAL_MS);
     }
 
-    /**
-     * Stops the camera update task.
-     */
     public void stop() {
         running = false;
         if (taskHandle != null) {
             taskHandle.cancel(false);
             taskHandle = null;
         }
+        if (positionTaskHandle != null) {
+            positionTaskHandle.cancel(false);
+            positionTaskHandle = null;
+        }
+        positionCache.clear();
         LOGGER.atInfo().log("[Hylock] Camera update task stopped");
     }
 
-    /**
-     * Shuts down the scheduler completely.
-     */
     public void shutdown() {
         stop();
         scheduler.shutdown();
@@ -86,66 +95,55 @@ public class CameraUpdateTask implements Runnable {
     }
 
     /**
-     * Runs the camera update task.
+     * Syncs positions from WorldThread - runs at 30 FPS.
      */
-    @Override
-    public void run() {
-        if (!running) {
+    private void syncPositionsFromWorld() {
+        if (!running)
             return;
-        }
 
-        try {
-            updateAllLockedPlayers();
-        } catch (Exception e) {
-            LOGGER.atWarning().log("[Hylock] Error in camera update task: %s", e.getMessage());
-        }
-    }
-
-    /**
-     * Updates the camera for all players with active locks.
-     */
-    private void updateAllLockedPlayers() {
-        LockOnManager lockManager = plugin.getLockOnManager();
         CameraController cameraController = plugin.getCameraController();
-        LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
-
-        if (lockManager == null || cameraController == null) {
+        if (cameraController == null)
             return;
-        }
 
         Set<UUID> lockedPlayerIds = new HashSet<>(cameraController.getLockedPlayerIds());
 
         for (UUID playerId : lockedPlayerIds) {
             try {
-                updatePlayerCamera(playerId, lockManager, cameraController, indicatorManager);
+                Ref<EntityStore> entityRef = cameraController.getEntityRef(playerId);
+                if (entityRef == null)
+                    continue;
+
+                Store<EntityStore> store = entityRef.getStore();
+                if (store == null || store.getExternalData() == null)
+                    continue;
+
+                World world = store.getExternalData().getWorld();
+                if (world == null)
+                    continue;
+
+                // Schedule position reading on WorldThread
+                world.execute(() -> updatePositionCache(playerId, store, entityRef));
+
             } catch (Exception e) {
-                LOGGER.atWarning().log("[Hylock] Failed to update camera for player %s: %s",
-                    playerId, e.getMessage());
+                // Silently ignore
             }
         }
     }
 
     /**
-     * Updates the camera for a single player.
-     *
-     * @param playerId         the player's UUID
-     * @param lockManager      the lock-on manager
-     * @param cameraController the camera controller
-     * @param indicatorManager the indicator manager
+     * Updates the position cache - runs on WorldThread.
      */
-    private void updatePlayerCamera(UUID playerId, LockOnManager lockManager,
-                                     CameraController cameraController, LockIndicatorManager indicatorManager) {
-        PlayerRef playerRef = cameraController.getPlayerRef(playerId);
-        if (playerRef == null) {
-            cameraController.stopCameraLock(playerId);
+    private void updatePositionCache(UUID playerId, Store<EntityStore> store, Ref<EntityStore> entityRef) {
+        LockOnManager lockManager = plugin.getLockOnManager();
+        CameraController cameraController = plugin.getCameraController();
+        LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
+
+        if (lockManager == null || cameraController == null)
             return;
-        }
 
         if (lockManager.getState(playerId) != LockOnState.LOCKED) {
             cameraController.stopCameraLock(playerId);
-            if (indicatorManager != null) {
-                indicatorManager.showLockReleased(playerId);
-            }
+            positionCache.remove(playerId);
             return;
         }
 
@@ -153,46 +151,155 @@ public class CameraUpdateTask implements Runnable {
         if (target == null || !target.isValid()) {
             lockManager.releaseLock(playerId);
             cameraController.stopCameraLock(playerId);
-            if (indicatorManager != null) {
-                indicatorManager.showTargetLost(playerId, "Target lost");
-            }
+            positionCache.remove(playerId);
             return;
         }
 
-        double[] playerPos = cameraController.getLastKnownPosition(playerId);
-        if (playerPos == null) {
+        // Valider la référence d'entité du joueur avant d'y accéder
+        if (!entityRef.isValid()) {
+            lockManager.releaseLock(playerId);
+            cameraController.stopCameraLock(playerId);
+            if (indicatorManager != null) {
+                indicatorManager.showTargetLost(playerId, "Player entity invalid");
+            }
+            positionCache.remove(playerId);
             return;
+        }
+
+        TransformComponent playerTransform = store.getComponent(entityRef, TransformComponent.getComponentType());
+        if (playerTransform == null) {
+            lockManager.releaseLock(playerId);
+            cameraController.stopCameraLock(playerId);
+            if (indicatorManager != null) {
+                indicatorManager.showTargetLost(playerId, "Player transform missing");
+            }
+            positionCache.remove(playerId);
+            return;
+        }
+
+        Vector3d playerPosition = playerTransform.getPosition();
+        double playerX = playerPosition.getX();
+        double playerY = playerPosition.getY();
+        double playerZ = playerPosition.getZ();
+
+        // Update target position
+        Ref<EntityStore> targetRef = target.getEntityRef();
+        double targetX = target.getLastKnownX();
+        double targetY = target.getLastKnownY();
+        double targetZ = target.getLastKnownZ();
+
+        if (targetRef != null) {
+            // Valider la référence d'entité avant d'y accéder
+            if (!targetRef.isValid()) {
+                lockManager.releaseLock(playerId);
+                cameraController.stopCameraLock(playerId);
+                if (indicatorManager != null) {
+                    indicatorManager.showTargetLost(playerId, "Target entity invalid");
+                }
+                positionCache.remove(playerId);
+                return;
+            }
+
+            TransformComponent targetTransform = store.getComponent(targetRef, TransformComponent.getComponentType());
+            if (targetTransform != null) {
+                Vector3d targetPos = targetTransform.getPosition();
+                if (targetPos != null) {
+                    targetX = targetPos.getX();
+                    targetY = targetPos.getY();
+                    targetZ = targetPos.getZ();
+                    target.updatePosition(targetX, targetY, targetZ);
+                }
+            } else {
+                lockManager.releaseLock(playerId);
+                cameraController.stopCameraLock(playerId);
+                if (indicatorManager != null) {
+                    indicatorManager.showTargetLost(playerId, "Target disappeared");
+                }
+                positionCache.remove(playerId);
+                return;
+            }
         }
 
         HylockConfig config = plugin.getConfig();
-        double distance = target.distanceFrom(playerPos[0], playerPos[1], playerPos[2]);
+        double distance = target.distanceFrom(playerX, playerY, playerZ);
         if (distance > config.getLockOnRange()) {
             lockManager.releaseLock(playerId);
             cameraController.stopCameraLock(playerId);
             if (indicatorManager != null) {
                 indicatorManager.showTargetLost(playerId, "Out of range");
             }
-
-            LOGGER.atInfo().log("[Hylock] Target out of range (%.1f blocks), releasing lock for %s",
-                distance, playerId);
+            positionCache.remove(playerId);
             return;
         }
 
-        cameraController.updateCamera(playerId, playerPos[0], playerPos[1], playerPos[2], target);
+        // Cache the positions for the fast update loop
+        positionCache.put(playerId, new CachedPositions(playerX, playerY, playerZ, targetX, targetY, targetZ));
+
+        cameraController.updatePlayerPosition(playerId, playerX, playerY, playerZ);
 
         if (indicatorManager != null) {
-            indicatorManager.updateIndicator(playerId, playerPos[0], playerPos[1], playerPos[2], target);
+            indicatorManager.updateIndicator(playerId, playerX, playerY, playerZ, target);
         }
 
-        lockManager.update(playerId, playerPos[0], playerPos[1], playerPos[2]);
+        // Utiliser la méthode avec le contexte du monde pour une meilleure validation
+        // des cibles
+        World world = store.getExternalData().getWorld();
+        lockManager.updateWithWorldContext(playerId, playerX, playerY, playerZ, store, world);
     }
 
     /**
-     * Checks if the task is currently running.
-     *
-     * @return true if running
+     * Fast camera update loop - runs at high FPS, only sends packets.
      */
+    @Override
+    public void run() {
+        if (!running)
+            return;
+
+        CameraController cameraController = plugin.getCameraController();
+        LockOnManager lockManager = plugin.getLockOnManager();
+        if (cameraController == null || lockManager == null)
+            return;
+
+        for (Map.Entry<UUID, CachedPositions> entry : positionCache.entrySet()) {
+            UUID playerId = entry.getKey();
+            CachedPositions pos = entry.getValue();
+
+            if (lockManager.getState(playerId) != LockOnState.LOCKED)
+                continue;
+
+            TargetInfo target = lockManager.getLockedTarget(playerId);
+            if (target == null)
+                continue;
+
+            try {
+                // Use cached positions for camera calculation and packet sending
+                cameraController.updateCameraFromCache(playerId, pos.playerX, pos.playerY, pos.playerZ,
+                        pos.targetX, pos.targetY, pos.targetZ);
+            } catch (Exception e) {
+                // Silently ignore
+            }
+        }
+    }
+
     public boolean isRunning() {
         return running;
+    }
+
+    /**
+     * Cached positions for fast access without WorldThread.
+     */
+    private static class CachedPositions {
+        final double playerX, playerY, playerZ;
+        final double targetX, targetY, targetZ;
+
+        CachedPositions(double playerX, double playerY, double playerZ,
+                double targetX, double targetY, double targetZ) {
+            this.playerX = playerX;
+            this.playerY = playerY;
+            this.playerZ = playerZ;
+            this.targetX = targetX;
+            this.targetY = targetY;
+            this.targetZ = targetZ;
+        }
     }
 }

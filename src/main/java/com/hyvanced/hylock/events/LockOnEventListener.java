@@ -129,7 +129,7 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
                 if (playerTransform != null) {
                     Vector3d playerPos = playerTransform.getPosition();
                     cameraController.updatePlayerPosition(playerId,
-                        playerPos.getX(), playerPos.getY(), playerPos.getZ());
+                            playerPos.getX(), playerPos.getY(), playerPos.getZ());
                 }
             }
 
@@ -150,13 +150,44 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
      */
     private void handleEmptyClick(PlayerRef playerRef, UUID playerId,
             LockOnManager lockManager, LockOnState currentState) {
-        if (currentState == LockOnState.LOCKED) {
-            CameraController cameraController = plugin.getCameraController();
-            LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
+        CameraController cameraController = plugin.getCameraController();
+        LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
 
+        if (currentState == LockOnState.LOCKED) {
+            // Si verrouillé, relâcher le verrou
             lockManager.releaseLock(playerId);
             cameraController.stopCameraLock(playerId);
             indicatorManager.showLockReleased(playerId);
+        } else {
+            // Si non verrouillé, essayer de verrouiller sur la cible la plus proche
+            // On a besoin d'accéder au monde et au store pour chercher les entités
+            // Pour l'instant, on va juste tenter de chercher une cible sans contexte du
+            // monde
+            // ce qui limitera la fonctionnalité mais évitera une erreur
+
+            // Récupérer la position du joueur pour la recherche
+            // Utilisation du TransformComponent directement depuis le PlayerRef
+            // On suppose que le PlayerRef contient les informations de position
+            // Accéder à la position via le TransformComponent du joueur
+            // On va tenter d'obtenir la position du joueur via le CameraController
+            double[] playerPosArray = plugin.getCameraController().getLastKnownPosition(playerId);
+            if (playerPosArray != null) {
+                // Appel de la méthode de recherche de cible la plus proche
+                // On ne peut pas utiliser la méthode complète avec le store ici sans modifier
+                // la signature
+                // Donc on appellera la méthode qui essaie de verrouiller sur la cible la plus
+                // proche
+                boolean locked = lockManager.tryFindAndLockNearestTarget(playerId, 1);
+                if (locked) {
+                    cameraController.startCameraLock(playerId, playerRef);
+                    cameraController.updatePlayerPosition(playerId,
+                            playerPosArray[0], playerPosArray[1], playerPosArray[2]);
+                    TargetInfo target = lockManager.getLockedTarget(playerId);
+                    if (target != null) {
+                        indicatorManager.showLockAcquired(playerId, playerRef, target);
+                    }
+                }
+            }
         }
     }
 
@@ -179,10 +210,20 @@ public class LockOnEventListener implements Consumer<PlayerMouseButtonEvent> {
             return false;
         }
 
+        // Vérifier si l'entité est un joueur
         if (entity instanceof com.hypixel.hytale.server.core.entity.entities.Player) {
             return config.isLockOnPlayers();
         }
 
+        // Exclure les items du lock - supposons qu'il existe un type spécifique pour
+        // les items
+        // dans la hiérarchie des entités d'Hytale
+        // Typiquement, les items ramassables sont d'un type spécifique comme ItemEntity
+        if (entity.getClass().getSimpleName().toLowerCase().contains("item")) {
+            return false; // Ne pas verrouiller sur les items
+        }
+
+        // Autoriser les autres types d'entités (mobs, NPC, etc.)
         return true;
     }
 

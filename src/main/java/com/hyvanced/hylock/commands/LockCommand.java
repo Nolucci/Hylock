@@ -18,6 +18,8 @@ import com.hypixel.hytale.server.core.universe.world.World;
 import com.hypixel.hytale.server.core.entity.Entity;
 import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
 import com.hyvanced.hylock.HylockPlugin;
+import com.hyvanced.hylock.camera.CameraController;
+import com.hyvanced.hylock.camera.LockIndicatorManager;
 import com.hyvanced.hylock.events.MouseTargetTracker;
 import com.hyvanced.hylock.lockon.LockOnManager;
 import com.hyvanced.hylock.lockon.LockOnState;
@@ -69,11 +71,28 @@ public class LockCommand extends AbstractPlayerCommand {
         LockOnState currentState = lockManager.getState(playerId);
         LOGGER.atInfo().log("[Hylock] Current lock state: %s", currentState);
 
+        CameraController cameraController = plugin.getCameraController();
+        LockIndicatorManager indicatorManager = plugin.getLockIndicatorManager();
+
+        LOGGER.atInfo().log("[Hylock] Getting player transform component...");
+        TransformComponent transform = store.getComponent(ref, TransformComponent.getComponentType());
+        if (transform == null) {
+            LOGGER.atWarning().log("[Hylock] TransformComponent is NULL!");
+            ctx.sendMessage(Message.raw("[Hylock] Could not get player position."));
+            return;
+        }
+
+        Vector3d position = transform.getPosition();
+        LOGGER.atInfo().log("[Hylock] Player position: (%.2f, %.2f, %.2f)",
+                position.getX(), position.getY(), position.getZ());
+
         if (currentState == LockOnState.LOCKED) {
             LOGGER.atInfo().log("[Hylock] Player is already locked, releasing...");
             TargetInfo currentTarget = lockManager.getLockedTarget(playerId);
             String targetName = currentTarget != null ? currentTarget.getEntityName() : "target";
             lockManager.releaseLock(playerId);
+            cameraController.stopCameraLock(playerId);
+            indicatorManager.showLockReleased(playerId);
             ctx.sendMessage(Message.raw("[Hylock] Released lock on " + targetName));
             return;
         }
@@ -93,6 +112,10 @@ public class LockCommand extends AbstractPlayerCommand {
 
                 TargetInfo target = createTargetInfoFromEntity(targetedEntity);
                 if (target != null && lockManager.lockOnTarget(playerId, target)) {
+                    cameraController.startCameraLock(playerId, playerRef);
+                    cameraController.updatePlayerPosition(playerId,
+                        position.getX(), position.getY(), position.getZ());
+                    indicatorManager.showLockAcquired(playerId, playerRef, target);
                     LOGGER.atInfo().log("[Hylock] Locked onto targeted entity: %s", target.getEntityName());
                     ctx.sendMessage(Message.raw("[Hylock] Locked onto " + target.getEntityName()));
                     return;
@@ -101,18 +124,6 @@ public class LockCommand extends AbstractPlayerCommand {
                 LOGGER.atInfo().log("[Hylock] No entity currently targeted by mouse");
             }
         }
-
-        LOGGER.atInfo().log("[Hylock] Getting player transform component...");
-        TransformComponent transform = store.getComponent(ref, TransformComponent.getComponentType());
-        if (transform == null) {
-            LOGGER.atWarning().log("[Hylock] TransformComponent is NULL!");
-            ctx.sendMessage(Message.raw("[Hylock] Could not get player position."));
-            return;
-        }
-
-        Vector3d position = transform.getPosition();
-        LOGGER.atInfo().log("[Hylock] Player position: (%.2f, %.2f, %.2f)",
-                position.getX(), position.getY(), position.getZ());
 
         ctx.sendMessage(Message.raw("[Hylock] Searching for target..."));
 
@@ -126,6 +137,10 @@ public class LockCommand extends AbstractPlayerCommand {
         if (found) {
             TargetInfo target = lockManager.getLockedTarget(playerId);
             if (target != null) {
+                cameraController.startCameraLock(playerId, playerRef);
+                cameraController.updatePlayerPosition(playerId,
+                    position.getX(), position.getY(), position.getZ());
+                indicatorManager.showLockAcquired(playerId, playerRef, target);
                 LOGGER.atInfo().log("[Hylock] Successfully locked onto: %s", target.getEntityName());
                 ctx.sendMessage(Message.raw("[Hylock] Locked onto " + target.getEntityName()));
             }

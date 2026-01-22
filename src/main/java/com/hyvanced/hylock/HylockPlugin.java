@@ -1,8 +1,14 @@
 package com.hyvanced.hylock;
 
 import com.hypixel.hytale.logger.HytaleLogger;
+import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
+import com.hypixel.hytale.server.core.event.events.player.PlayerMouseButtonEvent;
+import com.hypixel.hytale.server.core.event.events.player.PlayerMouseMotionEvent;
 import com.hypixel.hytale.server.core.plugin.JavaPlugin;
 import com.hypixel.hytale.server.core.plugin.JavaPluginInit;
+import com.hyvanced.hylock.camera.CameraController;
+import com.hyvanced.hylock.camera.CameraUpdateTask;
+import com.hyvanced.hylock.camera.LockIndicatorManager;
 import com.hyvanced.hylock.commands.HylockCommand;
 import com.hyvanced.hylock.commands.HylockResetCommand;
 import com.hyvanced.hylock.commands.HylockStatusCommand;
@@ -10,17 +16,11 @@ import com.hyvanced.hylock.commands.LockCommand;
 import com.hyvanced.hylock.commands.LockSwitchCommand;
 import com.hyvanced.hylock.commands.LockToggleCommand;
 import com.hyvanced.hylock.commands.UnlockCommand;
-import com.hyvanced.hylock.camera.CameraController;
-import com.hyvanced.hylock.camera.CameraUpdateTask;
-import com.hyvanced.hylock.camera.LockIndicatorManager;
 import com.hyvanced.hylock.config.HylockConfig;
 import com.hyvanced.hylock.events.LockOnEventListener;
 import com.hyvanced.hylock.events.MouseTargetTracker;
 import com.hyvanced.hylock.events.PlayerInteractListener;
 import com.hyvanced.hylock.lockon.LockOnManager;
-import com.hypixel.hytale.server.core.event.events.player.PlayerInteractEvent;
-import com.hypixel.hytale.server.core.event.events.player.PlayerMouseButtonEvent;
-import com.hypixel.hytale.server.core.event.events.player.PlayerMouseMotionEvent;
 
 /**
  * Hylock - Zelda-style target lock-on system for Hytale.
@@ -46,12 +46,13 @@ public class HylockPlugin extends JavaPlugin {
         super(init);
         instance = this;
         LOGGER.atInfo().log("[Hylock] Initializing %s v%s by Nolucci (Hyvanced)",
-            this.getName(),
-            this.getManifest().getVersion().toString());
+                this.getName(),
+                this.getManifest().getVersion().toString());
     }
 
     /**
-     * Sets up the plugin by initializing all components and registering commands and events.
+     * Sets up the plugin by initializing all components and registering commands
+     * and events.
      */
     @Override
     protected void setup() {

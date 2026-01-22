@@ -24,3 +24,6 @@ Thumbs.db
 
 # Local tools
 .claude/
+
+hytale/
+hytale_decompiled/

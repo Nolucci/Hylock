@@ -1,5 +1,8 @@
 package com.hyvanced.hylock.lockon;
 
+import com.hypixel.hytale.component.Ref;
+import com.hypixel.hytale.server.core.universe.world.storage.EntityStore;
+
 import java.util.UUID;
 
 /**
@@ -12,6 +15,7 @@ public class TargetInfo {
     private final String entityName;
     private final boolean isHostile;
     private final boolean isPlayer;
+    private Ref<EntityStore> entityRef;
 
     private double lastKnownX;
     private double lastKnownY;
@@ -70,6 +74,24 @@ public class TargetInfo {
      */
     public boolean isPlayer() {
         return isPlayer;
+    }
+
+    /**
+     * Returns the entity reference for direct component access.
+     *
+     * @return the entity reference, or null if not set
+     */
+    public Ref<EntityStore> getEntityRef() {
+        return entityRef;
+    }
+
+    /**
+     * Sets the entity reference for direct component access.
+     *
+     * @param entityRef the entity reference
+     */
+    public void setEntityRef(Ref<EntityStore> entityRef) {
+        this.entityRef = entityRef;
     }
 
     /**
@@ -174,11 +196,6 @@ public class TargetInfo {
         return Math.sqrt(dx * dx + dz * dz);
     }
 
-    /**
-     * Returns a string representation of this target info.
-     *
-     * @return the string representation
-     */
     @Override
     public String toString() {
         return String.format("TargetInfo{entity=%s, name='%s', hostile=%s, player=%s, pos=(%.1f, %.1f, %.1f)}",
